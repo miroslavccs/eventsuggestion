@@ -1,0 +1,38 @@
+services:
+
+  # ── PostgreSQL ──────────────────────────────────────────────
+  db:
+    image: postgres:16-alpine
+    container_name: eventsuggestion-db
+    environment:
+      POSTGRES_DB: eventsuggestion
+      POSTGRES_USER: eventsuggestion
+      POSTGRES_PASSWORD: eventsuggestion
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U eventsuggestion -d eventsuggestion"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Application ─────────────────────────────────────────────
+  app:
+    build: .
+    container_name: eventsuggestion-app
+    ports:
+      - "8080:8080"
+    environment:
+      DB_URL: jdbc:postgresql://db:5432/eventsuggestion
+      DB_USERNAME: eventsuggestion
+      DB_PASSWORD: eventsuggestion
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      JWT_SECRET: ${JWT_SECRET:-eventsuggestionSecretKey2026!MustBe256BitsLongForSecurity}
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
