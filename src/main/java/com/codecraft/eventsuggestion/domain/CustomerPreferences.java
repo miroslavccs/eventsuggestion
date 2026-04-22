@@ -28,9 +28,9 @@ public class CustomerPreferences {
     private List<String> hobbies = new ArrayList<>();
 
     @ElementCollection(fetch = FetchType.EAGER)
-    @CollectionTable(name = "pref_art", joinColumns = @JoinColumn(name = "preference_id"))
-    @Column(name = "art_interest")
-    private List<String> artInterests = new ArrayList<>();
+    @CollectionTable(name = "interests", joinColumns = @JoinColumn(name = "preference_id"))
+    @Column(name = "interest")
+    private List<String> interests = new ArrayList<>();
 
     private boolean likesTraveling;
     private boolean likesNightlife;
@@ -58,8 +58,8 @@ public class CustomerPreferences {
     public List<String> getHobbies() { return hobbies; }
     public void setHobbies(List<String> hobbies) { this.hobbies = hobbies; }
 
-    public List<String> getArtInterests() { return artInterests; }
-    public void setArtInterests(List<String> artInterests) { this.artInterests = artInterests; }
+    public List<String> getInterests() { return interests; }
+    public void setInterests(List<String> interests) { this.interests = interests; }
 
     public boolean isLikesTraveling() { return likesTraveling; }
     public void setLikesTraveling(boolean likesTraveling) { this.likesTraveling = likesTraveling; }

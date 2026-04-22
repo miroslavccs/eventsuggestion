@@ -20,7 +20,7 @@ public record CustomerProfileDto(
         // Preferences
         List<String> sports,
         List<String> hobbies,
-        List<String> artInterests,
+        List<String> interests,
         boolean likesTraveling,
         boolean likesNightlife,
         String additionalNotes
@@ -45,7 +45,7 @@ public record CustomerProfileDto(
                 c.getCurrentEmployment(),
                 p != null ? p.getSports() : List.of(),
                 p != null ? p.getHobbies() : List.of(),
-                p != null ? p.getArtInterests() : List.of(),
+                p != null ? p.getInterests() : List.of(),
                 p != null && p.isLikesTraveling(),
                 p != null && p.isLikesNightlife(),
                 p != null ? p.getAdditionalNotes() : null

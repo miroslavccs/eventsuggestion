@@ -149,7 +149,7 @@ curl -s -X POST http://localhost:8080/api/auth/register \
     "currentEmployment": "Software Engineer",
     "sports": ["yoga", "cycling"],
     "hobbies": ["photography", "cooking"],
-    "artInterests": ["jazz", "contemporary art"],
+    "interests": ["jazz", "contemporary art"],
     "likesTraveling": true,
     "likesNightlife": false
   }'

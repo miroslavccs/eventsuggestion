@@ -163,7 +163,7 @@ public class OpenAIService {
             sb.append("\nINTERESTS & PREFERENCES:\n");
             if (!prefs.getSports().isEmpty()) sb.append("- Sports: ").append(String.join(", ", prefs.getSports())).append("\n");
             if (!prefs.getHobbies().isEmpty()) sb.append("- Hobbies: ").append(String.join(", ", prefs.getHobbies())).append("\n");
-            if (!prefs.getArtInterests().isEmpty()) sb.append("- Art/Culture: ").append(String.join(", ", prefs.getArtInterests())).append("\n");
+            if (!prefs.getInterests().isEmpty()) sb.append("- Other Interests: ").append(String.join(", ", prefs.getInterests())).append("\n");
             sb.append("- Likes Traveling: ").append(prefs.isLikesTraveling()).append("\n");
             sb.append("- Likes Nightlife: ").append(prefs.isLikesNightlife()).append("\n");
             if (prefs.getAdditionalNotes() != null) sb.append("- Notes: ").append(prefs.getAdditionalNotes()).append("\n");

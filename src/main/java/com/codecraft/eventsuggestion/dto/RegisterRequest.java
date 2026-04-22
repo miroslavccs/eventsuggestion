@@ -18,7 +18,7 @@ public record RegisterRequest(
         // Preferences
         List<String> sports,
         List<String> hobbies,
-        List<String> artInterests,
+        List<String> interests,
         boolean likesTraveling,
         boolean likesNightlife,
         String additionalNotes

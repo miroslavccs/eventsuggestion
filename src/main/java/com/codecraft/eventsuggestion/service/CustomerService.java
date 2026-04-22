@@ -67,7 +67,7 @@ public class CustomerService {
         prefs.setCustomer(saved);
         prefs.setSports(req.sports() != null ? req.sports() : List.of());
         prefs.setHobbies(req.hobbies() != null ? req.hobbies() : List.of());
-        prefs.setArtInterests(req.artInterests() != null ? req.artInterests() : List.of());
+        prefs.setInterests(req.interests() != null ? req.interests() : List.of());
         prefs.setLikesTraveling(req.likesTraveling());
         prefs.setLikesNightlife(req.likesNightlife());
         prefs.setAdditionalNotes(req.additionalNotes());
@@ -124,7 +124,7 @@ public class CustomerService {
 
         prefs.setSports(dto.sports() != null ? dto.sports() : List.of());
         prefs.setHobbies(dto.hobbies() != null ? dto.hobbies() : List.of());
-        prefs.setArtInterests(dto.artInterests() != null ? dto.artInterests() : List.of());
+        prefs.setInterests(dto.interests() != null ? dto.interests() : List.of());
         prefs.setLikesTraveling(dto.likesTraveling());
         prefs.setLikesNightlife(dto.likesNightlife());
         prefs.setAdditionalNotes(dto.additionalNotes());

@@ -48,10 +48,10 @@ CREATE TABLE pref_hobbies (
     hobby         VARCHAR(255)
 );
 
--- ElementCollection: art interests
-CREATE TABLE pref_art (
+-- ElementCollection: interests
+CREATE TABLE interests (
     preference_id BIGINT       NOT NULL REFERENCES customer_preferences(id) ON DELETE CASCADE,
-    art_interest  VARCHAR(255)
+    interest     VARCHAR(255)
 );
 
 -- ── Suggestions ───────────────────────────────────────────────
