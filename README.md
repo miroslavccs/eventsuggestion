@@ -203,3 +203,12 @@ All settings can be overridden via environment variables:
 | `openai.model` | — | `gpt-4o` |
 | `app.jwt.secret` | `JWT_SECRET` | dev default |
 | `app.jwt.expiration-ms` | — | `86400000` (24 h) |
+
+---
+
+## Changelog
+
+### 0.0.3
+- Fixed `JwtUtil` deriving its signing key through a redundant Base64 encode/decode round trip; it now uses the secret's raw UTF-8 bytes directly.
+- Fixed `OpenAIService.isApiKeyMissing()`, which checked a field that was never null and so never detected a missing key. The `openai.api-key` default was also changed from the placeholder `test` to empty, matching this table.
+- `GlobalExceptionHandler`'s catch-all handler now logs unhandled exceptions instead of swallowing them silently.

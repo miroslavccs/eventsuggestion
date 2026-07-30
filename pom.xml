@@ -10,7 +10,7 @@
 	</parent>
 	<groupId>com.codecraft</groupId>
 	<artifactId>eventsuggestion</artifactId>
-	<version>0.0.2-SNAPSHOT</version>
+	<version>0.0.3-SNAPSHOT</version>
 	<name>eventsuggestion</name>
 	<description>Personalized life enrichment suggestion platform</description>
 

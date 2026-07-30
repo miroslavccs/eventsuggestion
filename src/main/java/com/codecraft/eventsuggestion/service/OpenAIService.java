@@ -28,6 +28,7 @@ public class OpenAIService {
     private final ObjectMapper objectMapper;
     private final String model;
     private final int maxTokens;
+    private final boolean apiKeyMissing;
 
     public OpenAIService(
             @Value("${openai.api-key}") String apiKey,
@@ -38,6 +39,7 @@ public class OpenAIService {
         this.model = model;
         this.maxTokens = maxTokens;
         this.objectMapper = objectMapper;
+        this.apiKeyMissing = apiKey == null || apiKey.isBlank();
         this.restClient = RestClient.builder()
                 .baseUrl(baseUrl)
                 .defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + apiKey)
@@ -130,7 +132,7 @@ public class OpenAIService {
     }
 
     private boolean isApiKeyMissing() {
-        return restClient == null;
+        return apiKeyMissing;
     }
 
     private String buildSystemPrompt() {
