@@ -1,0 +1,31 @@
+version: 2.1
+
+jobs:
+  build-and-test:
+    docker:
+      - image: cimg/openjdk:21.0
+    steps:
+      - checkout
+      - restore_cache:
+          keys:
+            - v1-m2-{{ checksum "pom.xml" }}
+            - v1-m2-
+      - run:
+          name: Run tests
+          command: ./mvnw -B -ntp test
+      - store_test_results:
+          path: target/surefire-reports
+      - store_artifacts:
+          path: target/surefire-reports
+      - run:
+          name: Package (skip tests, already run above)
+          command: ./mvnw -B -ntp package -DskipTests
+      - save_cache:
+          key: v1-m2-{{ checksum "pom.xml" }}
+          paths:
+            - ~/.m2
+
+workflows:
+  build-and-test:
+    jobs:
+      - build-and-test

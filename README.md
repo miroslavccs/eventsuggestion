@@ -208,6 +208,10 @@ All settings can be overridden via environment variables:
 
 ## Changelog
 
+### 0.0.4
+- Added a unit test suite covering `CustomerService`, `SuggestionService`, `OpenAIService`, `JwtUtil`, `JwtAuthFilter`, and `UserDetailsServiceImpl`, plus a full-stack `SecurityIntegrationTest` that verifies JWT enforcement end-to-end against the existing H2/Flyway test profile.
+- Added a CircleCI pipeline (`.circleci/config.yml`) that runs `mvnw test` and `mvnw package` on every push, with Maven dependency caching and JUnit test result reporting.
+
 ### 0.0.3
 - Fixed `JwtUtil` deriving its signing key through a redundant Base64 encode/decode round trip; it now uses the secret's raw UTF-8 bytes directly.
 - Fixed `OpenAIService.isApiKeyMissing()`, which checked a field that was never null and so never detected a missing key. The `openai.api-key` default was also changed from the placeholder `test` to empty, matching this table.
