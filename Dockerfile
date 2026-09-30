@@ -16,7 +16,7 @@ WORKDIR /app
 RUN addgroup -S eventsuggestion && adduser -S eventsuggestion -G eventsuggestion
 USER eventsuggestion
 
-COPY --from=build /build/target/eventsuggestion-0.0.4-SNAPSHOT.jar app.jar
+COPY --from=build /build/target/eventsuggestion-0.0.5-SNAPSHOT.jar app.jar
 
 EXPOSE 8080
 ENTRYPOINT ["java", "-jar", "app.jar"]

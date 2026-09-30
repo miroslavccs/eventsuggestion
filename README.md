@@ -208,6 +208,10 @@ All settings can be overridden via environment variables:
 
 ## Changelog
 
+### 0.0.5
+- `GlobalExceptionHandler` now returns RFC 7807 `ProblemDetail` responses (`application/problem+json`) instead of the previous ad-hoc `ErrorResponse` record and raw `Map` for validation errors; field-level validation errors are now nested under an `errors` property.
+- Added `SuggestionIntegrationTest`, a full-stack test covering every `SuggestionController` endpoint (list, filter, notifications, generate, feedback, mark-read) including negative cases for invalid status, missing status, unknown suggestion id, and cross-customer ownership isolation.
+
 ### 0.0.4
 - Added a unit test suite covering `CustomerService`, `SuggestionService`, `OpenAIService`, `JwtUtil`, `JwtAuthFilter`, and `UserDetailsServiceImpl`, plus a full-stack `SecurityIntegrationTest` that verifies JWT enforcement end-to-end against the existing H2/Flyway test profile.
 - Added a CircleCI pipeline (`.circleci/config.yml`) that runs `mvnw test` and `mvnw package` on every push, with Maven dependency caching and JUnit test result reporting.

@@ -124,6 +124,7 @@ class SecurityIntegrationTest {
                 .returnResult()
                 .getResponseBody();
 
-        assertThat(body).containsKey("email");
+        assertThat(body).containsKey("errors");
+        assertThat((Map) body.get("errors")).containsKey("email");
     }
 }
