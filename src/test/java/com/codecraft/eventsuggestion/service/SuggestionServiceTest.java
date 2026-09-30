@@ -156,7 +156,7 @@ class SuggestionServiceTest {
     @Test
     void getNotifications_mapsUnreadSuggestions() {
         SuggestionService service = newService();
-        when(suggestionRepository.findByCustomerIdAndNotificationReadFalseOrderByCreatedAtDesc(1L))
+        when(suggestionRepository.findActiveNotifications(1L))
                 .thenReturn(List.of(new Suggestion()));
 
         assertThat(service.getNotifications(1L)).hasSize(1);
@@ -318,6 +318,98 @@ class SuggestionServiceTest {
         when(suggestionRepository.findByIdAndCustomerId(1L, 1L)).thenReturn(Optional.empty());
 
         service.markNotificationRead(1L, 1L);
+
+        verify(suggestionRepository, never()).save(any());
+    }
+
+    // ─── snoozeSuggestion ────────────────────────────────────────────────────
+
+    @Test
+    void snoozeSuggestion_pendingSuggestion_setsSnoozedUntil() {
+        SuggestionService service = newService();
+        Suggestion suggestion = new Suggestion();
+        suggestion.setStatus(SuggestionStatus.PENDING);
+        when(suggestionRepository.findByIdAndCustomerId(1L, 1L)).thenReturn(Optional.of(suggestion));
+        when(suggestionRepository.save(any(Suggestion.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        LocalDate until = LocalDate.now().plusDays(3);
+        SuggestionDto result = service.snoozeSuggestion(1L, 1L, until);
+
+        assertThat(result.snoozedUntil()).isEqualTo(until);
+        assertThat(suggestion.getSnoozedUntil()).isEqualTo(until);
+    }
+
+    @Test
+    void snoozeSuggestion_notFound_throwsEntityNotFound() {
+        SuggestionService service = newService();
+        when(suggestionRepository.findByIdAndCustomerId(1L, 1L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.snoozeSuggestion(1L, 1L, LocalDate.now().plusDays(1)))
+                .isInstanceOf(EntityNotFoundException.class);
+    }
+
+    @Test
+    void snoozeSuggestion_notPending_throwsAndNeverSaves() {
+        SuggestionService service = newService();
+        Suggestion suggestion = new Suggestion();
+        suggestion.setStatus(SuggestionStatus.ACCEPTED);
+        when(suggestionRepository.findByIdAndCustomerId(1L, 1L)).thenReturn(Optional.of(suggestion));
+
+        assertThatThrownBy(() -> service.snoozeSuggestion(1L, 1L, LocalDate.now().plusDays(1)))
+                .isInstanceOf(IllegalArgumentException.class);
+
+        verify(suggestionRepository, never()).save(any());
+    }
+
+    // ─── rateSuggestion ──────────────────────────────────────────────────────
+
+    @Test
+    void rateSuggestion_acceptedAndPastDated_setsRating() {
+        SuggestionService service = newService();
+        Suggestion suggestion = new Suggestion();
+        suggestion.setStatus(SuggestionStatus.ACCEPTED);
+        suggestion.setSuggestedDate(LocalDate.now().minusDays(1));
+        when(suggestionRepository.findByIdAndCustomerId(1L, 1L)).thenReturn(Optional.of(suggestion));
+        when(suggestionRepository.save(any(Suggestion.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        SuggestionDto result = service.rateSuggestion(1L, 1L, 5);
+
+        assertThat(result.rating()).isEqualTo(5);
+        assertThat(suggestion.getRating()).isEqualTo(5);
+    }
+
+    @Test
+    void rateSuggestion_notFound_throwsEntityNotFound() {
+        SuggestionService service = newService();
+        when(suggestionRepository.findByIdAndCustomerId(1L, 1L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.rateSuggestion(1L, 1L, 5))
+                .isInstanceOf(EntityNotFoundException.class);
+    }
+
+    @Test
+    void rateSuggestion_notAccepted_throwsAndNeverSaves() {
+        SuggestionService service = newService();
+        Suggestion suggestion = new Suggestion();
+        suggestion.setStatus(SuggestionStatus.PENDING);
+        when(suggestionRepository.findByIdAndCustomerId(1L, 1L)).thenReturn(Optional.of(suggestion));
+
+        assertThatThrownBy(() -> service.rateSuggestion(1L, 1L, 5))
+                .isInstanceOf(IllegalArgumentException.class);
+
+        verify(suggestionRepository, never()).save(any());
+    }
+
+    @Test
+    void rateSuggestion_dateNotYetPassed_throwsAndNeverSaves() {
+        SuggestionService service = newService();
+        Suggestion suggestion = new Suggestion();
+        suggestion.setStatus(SuggestionStatus.ACCEPTED);
+        suggestion.setSuggestedDate(LocalDate.now().plusDays(1));
+        when(suggestionRepository.findByIdAndCustomerId(1L, 1L)).thenReturn(Optional.of(suggestion));
+
+        assertThatThrownBy(() -> service.rateSuggestion(1L, 1L, 5))
+                .isInstanceOf(IllegalArgumentException.class);
 
         verify(suggestionRepository, never()).save(any());
     }

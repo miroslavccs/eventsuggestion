@@ -17,7 +17,9 @@ public interface SuggestionRepository extends JpaRepository<Suggestion, Long> {
 
     List<Suggestion> findByCustomerIdAndCategoryOrderByCreatedAtDesc(Long customerId, SuggestionCategory category);
 
-    List<Suggestion> findByCustomerIdAndNotificationReadFalseOrderByCreatedAtDesc(Long customerId);
+    @Query("SELECT s FROM Suggestion s WHERE s.customer.id = :customerId AND s.notificationRead = false " +
+           "AND (s.snoozedUntil IS NULL OR s.snoozedUntil <= CURRENT_DATE) ORDER BY s.createdAt DESC")
+    List<Suggestion> findActiveNotifications(@Param("customerId") Long customerId);
 
     Optional<Suggestion> findByIdAndCustomerId(Long id, Long customerId);
 

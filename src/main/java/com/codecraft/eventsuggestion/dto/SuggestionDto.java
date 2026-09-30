@@ -20,7 +20,9 @@ public record SuggestionDto(
         String feedbackComment,
         LocalDateTime createdAt,
         LocalDateTime respondedAt,
-        boolean notificationRead
+        boolean notificationRead,
+        Integer rating,
+        LocalDate snoozedUntil
 ) {
     public static SuggestionDto from(Suggestion s) {
         return new SuggestionDto(
@@ -36,7 +38,9 @@ public record SuggestionDto(
                 s.getFeedbackComment(),
                 s.getCreatedAt(),
                 s.getRespondedAt(),
-                s.isNotificationRead()
+                s.isNotificationRead(),
+                s.getRating(),
+                s.getSnoozedUntil()
         );
     }
 }

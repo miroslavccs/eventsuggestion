@@ -176,6 +176,18 @@ curl -s -X PUT http://localhost:8080/api/suggestions/2/feedback \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{ "status": "REJECTED", "comment": "Not into opera" }'
+
+# 6. Snooze suggestion #3 until next week
+curl -s -X PUT http://localhost:8080/api/suggestions/3/snooze \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{ "until": "2027-01-08" }'
+
+# 7. Rate suggestion #1 after attending (must be ACCEPTED and past its date)
+curl -s -X PUT http://localhost:8080/api/suggestions/1/rating \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{ "rating": 5 }'
 ```
 
 ---
@@ -207,6 +219,11 @@ All settings can be overridden via environment variables:
 ---
 
 ## Changelog
+
+### 0.0.6
+- Added `PUT /api/suggestions/{id}/snooze` to hide a pending suggestion from the notification feed until a given date; the notifications query now filters on `snoozedUntil` (see `SuggestionRepository.findActiveNotifications`).
+- Added `PUT /api/suggestions/{id}/rating` to record a 1-5 star rating on an accepted suggestion once its date has passed.
+- New migration `V2__suggestion_snooze_and_rating.sql` adds `snoozed_until` and `rating` columns to `suggestions`.
 
 ### 0.0.5
 - `GlobalExceptionHandler` now returns RFC 7807 `ProblemDetail` responses (`application/problem+json`) instead of the previous ad-hoc `ErrorResponse` record and raw `Map` for validation errors; field-level validation errors are now nested under an `errors` property.

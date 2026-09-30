@@ -2,6 +2,8 @@ package com.codecraft.eventsuggestion.controller;
 
 import com.codecraft.eventsuggestion.domain.enums.SuggestionCategory;
 import com.codecraft.eventsuggestion.dto.FeedbackRequest;
+import com.codecraft.eventsuggestion.dto.RatingRequest;
+import com.codecraft.eventsuggestion.dto.SnoozeRequest;
 import com.codecraft.eventsuggestion.dto.SuggestionDto;
 import com.codecraft.eventsuggestion.service.CustomerService;
 import com.codecraft.eventsuggestion.service.SuggestionService;
@@ -118,5 +120,43 @@ public class SuggestionController {
         Long customerId = customerService.findByEmail(user.getUsername()).getId();
         suggestionService.markNotificationRead(id, customerId);
         return ResponseEntity.noContent().build();
+    }
+
+    @PutMapping("/{id}/snooze")
+    @Operation(
+        summary = "Snooze a suggestion",
+        description = "Hides a pending suggestion from the notification feed until the given date, when it reappears.",
+        responses = {
+            @ApiResponse(responseCode = "200", description = "Suggestion snoozed"),
+            @ApiResponse(responseCode = "400", description = "Invalid date, or suggestion isn't pending"),
+            @ApiResponse(responseCode = "404", description = "Suggestion not found")
+        }
+    )
+    public ResponseEntity<SuggestionDto> snoozeSuggestion(
+            @Parameter(description = "Suggestion ID") @PathVariable Long id,
+            @AuthenticationPrincipal UserDetails user,
+            @Valid @RequestBody SnoozeRequest request) {
+
+        Long customerId = customerService.findByEmail(user.getUsername()).getId();
+        return ResponseEntity.ok(suggestionService.snoozeSuggestion(id, customerId, request.until()));
+    }
+
+    @PutMapping("/{id}/rating")
+    @Operation(
+        summary = "Rate an accepted suggestion",
+        description = "Records a 1-5 star rating for a suggestion the customer accepted, once its date has passed.",
+        responses = {
+            @ApiResponse(responseCode = "200", description = "Rating recorded"),
+            @ApiResponse(responseCode = "400", description = "Invalid rating, suggestion isn't accepted, or its date hasn't passed yet"),
+            @ApiResponse(responseCode = "404", description = "Suggestion not found")
+        }
+    )
+    public ResponseEntity<SuggestionDto> rateSuggestion(
+            @Parameter(description = "Suggestion ID") @PathVariable Long id,
+            @AuthenticationPrincipal UserDetails user,
+            @Valid @RequestBody RatingRequest request) {
+
+        Long customerId = customerService.findByEmail(user.getUsername()).getId();
+        return ResponseEntity.ok(suggestionService.rateSuggestion(id, customerId, request.rating()));
     }
 }

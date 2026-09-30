@@ -112,7 +112,7 @@ public class SuggestionService {
     @Transactional(readOnly = true)
     public List<SuggestionDto> getNotifications(Long customerId) {
         return suggestionRepository
-                .findByCustomerIdAndNotificationReadFalseOrderByCreatedAtDesc(customerId)
+                .findActiveNotifications(customerId)
                 .stream()
                 .map(SuggestionDto::from)
                 .toList();
@@ -149,6 +149,35 @@ public class SuggestionService {
             s.setNotificationRead(true);
             suggestionRepository.save(s);
         });
+    }
+
+    @Transactional
+    public SuggestionDto snoozeSuggestion(Long suggestionId, Long customerId, LocalDate until) {
+        Suggestion suggestion = suggestionRepository.findByIdAndCustomerId(suggestionId, customerId)
+                .orElseThrow(() -> new EntityNotFoundException("Suggestion not found: " + suggestionId));
+
+        if (suggestion.getStatus() != SuggestionStatus.PENDING) {
+            throw new IllegalArgumentException("Only pending suggestions can be snoozed");
+        }
+
+        suggestion.setSnoozedUntil(until);
+        return SuggestionDto.from(suggestionRepository.save(suggestion));
+    }
+
+    @Transactional
+    public SuggestionDto rateSuggestion(Long suggestionId, Long customerId, Integer rating) {
+        Suggestion suggestion = suggestionRepository.findByIdAndCustomerId(suggestionId, customerId)
+                .orElseThrow(() -> new EntityNotFoundException("Suggestion not found: " + suggestionId));
+
+        if (suggestion.getStatus() != SuggestionStatus.ACCEPTED) {
+            throw new IllegalArgumentException("Can only rate an accepted suggestion");
+        }
+        if (suggestion.getSuggestedDate() != null && suggestion.getSuggestedDate().isAfter(LocalDate.now())) {
+            throw new IllegalArgumentException("Cannot rate a suggestion before its date");
+        }
+
+        suggestion.setRating(rating);
+        return SuggestionDto.from(suggestionRepository.save(suggestion));
     }
 
     // ─── Learning ────────────────────────────────────────────────────────────

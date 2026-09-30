@@ -50,6 +50,12 @@ public class Suggestion {
     /** False until the customer opens/dismisses the notification */
     private boolean notificationRead = false;
 
+    /** If set and in the future, the suggestion is hidden from the notification feed until this date */
+    private LocalDate snoozedUntil;
+
+    /** 1-5 customer rating, settable once the suggestion is ACCEPTED and its date has passed */
+    private Integer rating;
+
     @PrePersist
     protected void onCreate() {
         createdAt = LocalDateTime.now();
@@ -96,4 +102,10 @@ public class Suggestion {
 
     public boolean isNotificationRead() { return notificationRead; }
     public void setNotificationRead(boolean notificationRead) { this.notificationRead = notificationRead; }
+
+    public LocalDate getSnoozedUntil() { return snoozedUntil; }
+    public void setSnoozedUntil(LocalDate snoozedUntil) { this.snoozedUntil = snoozedUntil; }
+
+    public Integer getRating() { return rating; }
+    public void setRating(Integer rating) { this.rating = rating; }
 }
