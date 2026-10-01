@@ -188,6 +188,12 @@ curl -s -X PUT http://localhost:8080/api/suggestions/1/rating \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{ "rating": 5 }'
+
+# 8. Promote a wishlist suggestion #4 to a planned trip
+curl -s -X PUT http://localhost:8080/api/suggestions/4/plan \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{ "targetDate": "2027-03-01" }'
 ```
 
 ---
@@ -219,6 +225,12 @@ All settings can be overridden via environment variables:
 ---
 
 ## Changelog
+
+### 0.0.7
+- Added vacation mode and per-category pause (`vacationMode`, `pausedCategories` on `CustomerPreferences`, settable via `PUT /api/customers/me`) — the three scheduled generation jobs skip a customer whose preferences have them paused; the on-demand `POST /generate` is unaffected.
+- Added `PUT /api/suggestions/{id}/plan` to promote a `WISHLIST` suggestion to `ACCEPTED`, optionally setting a target date.
+- `reasonForSuggestion` now always has a value — suggestions where the AI omits it fall back to a default explanatory sentence instead of going blank.
+- New migration `V3__customer_pause_preferences.sql`.
 
 ### 0.0.6
 - Added `PUT /api/suggestions/{id}/snooze` to hide a pending suggestion from the notification feed until a given date; the notifications query now filters on `snoozedUntil` (see `SuggestionRepository.findActiveNotifications`).

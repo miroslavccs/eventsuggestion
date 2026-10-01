@@ -2,6 +2,7 @@ package com.codecraft.eventsuggestion.controller;
 
 import com.codecraft.eventsuggestion.domain.enums.SuggestionCategory;
 import com.codecraft.eventsuggestion.dto.FeedbackRequest;
+import com.codecraft.eventsuggestion.dto.PlanRequest;
 import com.codecraft.eventsuggestion.dto.RatingRequest;
 import com.codecraft.eventsuggestion.dto.SnoozeRequest;
 import com.codecraft.eventsuggestion.dto.SuggestionDto;
@@ -158,5 +159,24 @@ public class SuggestionController {
 
         Long customerId = customerService.findByEmail(user.getUsername()).getId();
         return ResponseEntity.ok(suggestionService.rateSuggestion(id, customerId, request.rating()));
+    }
+
+    @PutMapping("/{id}/plan")
+    @Operation(
+        summary = "Promote a wishlist suggestion to a planned one",
+        description = "Converts a WISHLIST suggestion to ACCEPTED, optionally setting a target date.",
+        responses = {
+            @ApiResponse(responseCode = "200", description = "Suggestion promoted"),
+            @ApiResponse(responseCode = "400", description = "Invalid target date, or suggestion isn't on the wishlist"),
+            @ApiResponse(responseCode = "404", description = "Suggestion not found")
+        }
+    )
+    public ResponseEntity<SuggestionDto> planSuggestion(
+            @Parameter(description = "Suggestion ID") @PathVariable Long id,
+            @AuthenticationPrincipal UserDetails user,
+            @Valid @RequestBody PlanRequest request) {
+
+        Long customerId = customerService.findByEmail(user.getUsername()).getId();
+        return ResponseEntity.ok(suggestionService.planSuggestion(id, customerId, request.targetDate()));
     }
 }

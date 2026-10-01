@@ -29,6 +29,7 @@ public class SuggestionService {
     private static final int SUGGESTIONS_PER_RUN = 3;
     private static final int FEEDBACK_HISTORY_LIMIT = 30;
     private static final int LEARNING_UPDATE_INTERVAL = 5;
+    private static final String DEFAULT_REASON = "Personalized pick based on your profile and preferences";
 
     private final SuggestionRepository suggestionRepository;
     private final CustomerRepository customerRepository;
@@ -71,11 +72,18 @@ public class SuggestionService {
     private void generateForAllCustomers(SuggestionCategory category) {
         customerRepository.findAll().forEach(customer -> {
             try {
+                if (isPaused(customer, category)) return;
                 generateForCustomer(customer, category);
             } catch (Exception e) {
                 log.error("Failed generating {} suggestions for customer {}", category, customer.getId(), e);
             }
         });
+    }
+
+    private boolean isPaused(Customer customer, SuggestionCategory category) {
+        return preferencesRepository.findByCustomer(customer)
+                .map(p -> p.isVacationMode() || p.getPausedCategories().contains(category))
+                .orElse(false);
     }
 
     // ─── On-demand generation (e.g., from controller or after registration) ──
@@ -180,6 +188,22 @@ public class SuggestionService {
         return SuggestionDto.from(suggestionRepository.save(suggestion));
     }
 
+    @Transactional
+    public SuggestionDto planSuggestion(Long suggestionId, Long customerId, LocalDate targetDate) {
+        Suggestion suggestion = suggestionRepository.findByIdAndCustomerId(suggestionId, customerId)
+                .orElseThrow(() -> new EntityNotFoundException("Suggestion not found: " + suggestionId));
+
+        if (suggestion.getStatus() != SuggestionStatus.WISHLIST) {
+            throw new IllegalArgumentException("Only wishlist suggestions can be planned");
+        }
+
+        suggestion.setStatus(SuggestionStatus.ACCEPTED);
+        if (targetDate != null) {
+            suggestion.setSuggestedDate(targetDate);
+        }
+        return SuggestionDto.from(suggestionRepository.save(suggestion));
+    }
+
     // ─── Learning ────────────────────────────────────────────────────────────
 
     @Transactional
@@ -211,10 +235,14 @@ public class SuggestionService {
         s.setLocation(data.location());
         s.setEstimatedCost(data.estimatedCost());
         s.setSuggestedDate(parseDateSafely(data.suggestedDate(), category));
-        s.setReasonForSuggestion(data.reasonForSuggestion());
+        s.setReasonForSuggestion(reasonOrDefault(data.reasonForSuggestion()));
         s.setStatus(SuggestionStatus.PENDING);
         s.setNotificationRead(false);
         return s;
+    }
+
+    private String reasonOrDefault(String reason) {
+        return (reason == null || reason.isBlank()) ? DEFAULT_REASON : reason;
     }
 
     private LocalDate parseDateSafely(String dateStr, SuggestionCategory category) {

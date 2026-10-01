@@ -2,6 +2,7 @@ package com.codecraft.eventsuggestion.service;
 
 import com.codecraft.eventsuggestion.domain.Customer;
 import com.codecraft.eventsuggestion.domain.CustomerPreferences;
+import com.codecraft.eventsuggestion.domain.enums.SuggestionCategory;
 import com.codecraft.eventsuggestion.dto.CustomerProfileDto;
 import com.codecraft.eventsuggestion.dto.LoginRequest;
 import com.codecraft.eventsuggestion.dto.LoginResponse;
@@ -207,7 +208,8 @@ class CustomerServiceTest {
 
         CustomerProfileDto dto = new CustomerProfileDto(
                 1L, "jane@example.com", "Jane", "Doe", null, 31, null, "MSc", "Engineer",
-                List.of("cycling"), List.of(), List.of(), true, true, "updated notes");
+                List.of("cycling"), List.of(), List.of(), true, true, "updated notes",
+                true, List.of(SuggestionCategory.DAILY));
 
         customerService.updateProfile("jane@example.com", dto);
 
@@ -215,6 +217,8 @@ class CustomerServiceTest {
         verify(preferencesRepository).save(prefsCaptor.capture());
         assertThat(prefsCaptor.getValue()).isSameAs(existingPrefs);
         assertThat(prefsCaptor.getValue().getSports()).containsExactly("cycling");
+        assertThat(prefsCaptor.getValue().isVacationMode()).isTrue();
+        assertThat(prefsCaptor.getValue().getPausedCategories()).containsExactly(SuggestionCategory.DAILY);
     }
 
     @Test
@@ -226,7 +230,7 @@ class CustomerServiceTest {
 
         CustomerProfileDto dto = new CustomerProfileDto(
                 1L, "jane@example.com", "Jane", "Doe", null, 31, null, "MSc", "Engineer",
-                List.of(), List.of(), List.of(), false, false, null);
+                List.of(), List.of(), List.of(), false, false, null, false, List.of());
 
         customerService.updateProfile("jane@example.com", dto);
 

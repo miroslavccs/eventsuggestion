@@ -21,6 +21,7 @@ import org.springframework.data.domain.Pageable;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -412,6 +413,143 @@ class SuggestionServiceTest {
                 .isInstanceOf(IllegalArgumentException.class);
 
         verify(suggestionRepository, never()).save(any());
+    }
+
+    // ─── planSuggestion ──────────────────────────────────────────────────────
+
+    @Test
+    void planSuggestion_wishlistWithTargetDate_promotesAndSetsDate() {
+        SuggestionService service = newService();
+        Suggestion suggestion = new Suggestion();
+        suggestion.setStatus(SuggestionStatus.WISHLIST);
+        suggestion.setSuggestedDate(LocalDate.now().plusDays(1));
+        when(suggestionRepository.findByIdAndCustomerId(1L, 1L)).thenReturn(Optional.of(suggestion));
+        when(suggestionRepository.save(any(Suggestion.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        LocalDate target = LocalDate.now().plusDays(10);
+        SuggestionDto result = service.planSuggestion(1L, 1L, target);
+
+        assertThat(result.status()).isEqualTo(SuggestionStatus.ACCEPTED);
+        assertThat(result.suggestedDate()).isEqualTo(target);
+    }
+
+    @Test
+    void planSuggestion_wishlistWithoutTargetDate_promotesAndKeepsExistingDate() {
+        SuggestionService service = newService();
+        Suggestion suggestion = new Suggestion();
+        suggestion.setStatus(SuggestionStatus.WISHLIST);
+        LocalDate existingDate = LocalDate.now().plusDays(5);
+        suggestion.setSuggestedDate(existingDate);
+        when(suggestionRepository.findByIdAndCustomerId(1L, 1L)).thenReturn(Optional.of(suggestion));
+        when(suggestionRepository.save(any(Suggestion.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        SuggestionDto result = service.planSuggestion(1L, 1L, null);
+
+        assertThat(result.status()).isEqualTo(SuggestionStatus.ACCEPTED);
+        assertThat(result.suggestedDate()).isEqualTo(existingDate);
+    }
+
+    @Test
+    void planSuggestion_notFound_throwsEntityNotFound() {
+        SuggestionService service = newService();
+        when(suggestionRepository.findByIdAndCustomerId(1L, 1L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.planSuggestion(1L, 1L, null))
+                .isInstanceOf(EntityNotFoundException.class);
+    }
+
+    @Test
+    void planSuggestion_notWishlist_throwsAndNeverSaves() {
+        SuggestionService service = newService();
+        Suggestion suggestion = new Suggestion();
+        suggestion.setStatus(SuggestionStatus.PENDING);
+        when(suggestionRepository.findByIdAndCustomerId(1L, 1L)).thenReturn(Optional.of(suggestion));
+
+        assertThatThrownBy(() -> service.planSuggestion(1L, 1L, null))
+                .isInstanceOf(IllegalArgumentException.class);
+
+        verify(suggestionRepository, never()).save(any());
+    }
+
+    // ─── Reason fallback ─────────────────────────────────────────────────────
+
+    @Test
+    void generateForCustomer_blankReason_fallsBackToDefaultReason() {
+        SuggestionService service = newService();
+        Customer customer = customer("jane@example.com");
+        when(preferencesRepository.findByCustomer(customer)).thenReturn(Optional.empty());
+        when(suggestionRepository.findRecentFeedback(any(), any(Pageable.class))).thenReturn(List.of());
+        when(openAIService.generateSuggestions(any(), any(), anyList(), any(), anyInt()))
+                .thenReturn(List.of(new OpenAIService.SuggestionData("T", "D", "L", "C", null, "  ")));
+        when(suggestionRepository.saveAll(anyList())).thenAnswer(inv -> inv.getArgument(0));
+
+        List<SuggestionDto> result = service.generateForCustomer(customer, SuggestionCategory.DAILY);
+
+        assertThat(result.get(0).reasonForSuggestion())
+                .isEqualTo("Personalized pick based on your profile and preferences");
+    }
+
+    @Test
+    void generateForCustomer_nonBlankReason_isPassedThroughUnchanged() {
+        SuggestionService service = newService();
+        Customer customer = customer("jane@example.com");
+        when(preferencesRepository.findByCustomer(customer)).thenReturn(Optional.empty());
+        when(suggestionRepository.findRecentFeedback(any(), any(Pageable.class))).thenReturn(List.of());
+        when(openAIService.generateSuggestions(any(), any(), anyList(), any(), anyInt()))
+                .thenReturn(List.of(new OpenAIService.SuggestionData("T", "D", "L", "C", null, "Matches your interests")));
+        when(suggestionRepository.saveAll(anyList())).thenAnswer(inv -> inv.getArgument(0));
+
+        List<SuggestionDto> result = service.generateForCustomer(customer, SuggestionCategory.DAILY);
+
+        assertThat(result.get(0).reasonForSuggestion()).isEqualTo("Matches your interests");
+    }
+
+    // ─── Vacation mode / paused categories ───────────────────────────────────
+
+    @Test
+    void generateDailySuggestions_vacationMode_skipsCustomerEntirely() {
+        SuggestionService service = newService();
+        Customer customer = customer("vacation@example.com");
+        CustomerPreferences prefs = new CustomerPreferences();
+        prefs.setVacationMode(true);
+        when(customerRepository.findAll()).thenReturn(List.of(customer));
+        when(preferencesRepository.findByCustomer(customer)).thenReturn(Optional.of(prefs));
+
+        service.generateDailySuggestions();
+
+        verifyNoInteractions(openAIService);
+        verify(suggestionRepository, never()).saveAll(any());
+    }
+
+    @Test
+    void generateDailySuggestions_categoryPaused_skipsCustomerForThatCategoryOnly() {
+        SuggestionService service = newService();
+        Customer customer = customer("paused-daily@example.com");
+        CustomerPreferences prefs = new CustomerPreferences();
+        prefs.setPausedCategories(Set.of(SuggestionCategory.DAILY));
+        when(customerRepository.findAll()).thenReturn(List.of(customer));
+        when(preferencesRepository.findByCustomer(customer)).thenReturn(Optional.of(prefs));
+
+        service.generateDailySuggestions();
+
+        verifyNoInteractions(openAIService);
+    }
+
+    @Test
+    void generateDailySuggestions_notPaused_generatesNormally() {
+        SuggestionService service = newService();
+        Customer customer = customer("active@example.com");
+        CustomerPreferences prefs = new CustomerPreferences();
+        when(customerRepository.findAll()).thenReturn(List.of(customer));
+        when(preferencesRepository.findByCustomer(customer)).thenReturn(Optional.of(prefs));
+        when(suggestionRepository.findRecentFeedback(any(), any(Pageable.class))).thenReturn(List.of());
+        when(openAIService.generateSuggestions(eq(customer), eq(prefs), anyList(), eq(SuggestionCategory.DAILY), eq(3)))
+                .thenReturn(List.of());
+        when(suggestionRepository.saveAll(anyList())).thenAnswer(inv -> inv.getArgument(0));
+
+        service.generateDailySuggestions();
+
+        verify(openAIService).generateSuggestions(eq(customer), eq(prefs), anyList(), eq(SuggestionCategory.DAILY), eq(3));
     }
 
     // ─── Scheduled batch resilience ──────────────────────────────────────────

@@ -15,7 +15,9 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 @Service
 public class CustomerService {
@@ -128,6 +130,8 @@ public class CustomerService {
         prefs.setLikesTraveling(dto.likesTraveling());
         prefs.setLikesNightlife(dto.likesNightlife());
         prefs.setAdditionalNotes(dto.additionalNotes());
+        prefs.setVacationMode(dto.vacationMode());
+        prefs.setPausedCategories(dto.pausedCategories() != null ? new HashSet<>(dto.pausedCategories()) : Set.of());
         preferencesRepository.save(prefs);
 
         return CustomerProfileDto.from(customer, prefs);

@@ -6,6 +6,7 @@ import com.codecraft.eventsuggestion.domain.enums.SuggestionCategory;
 import com.codecraft.eventsuggestion.domain.enums.SuggestionStatus;
 import com.codecraft.eventsuggestion.dto.FeedbackRequest;
 import com.codecraft.eventsuggestion.dto.LoginResponse;
+import com.codecraft.eventsuggestion.dto.PlanRequest;
 import com.codecraft.eventsuggestion.dto.RatingRequest;
 import com.codecraft.eventsuggestion.dto.RegisterRequest;
 import com.codecraft.eventsuggestion.dto.SnoozeRequest;
@@ -81,6 +82,12 @@ class SuggestionIntegrationTest {
         Suggestion s = seedSuggestion(customer, SuggestionCategory.DAILY, "Accepted pick");
         s.setStatus(SuggestionStatus.ACCEPTED);
         s.setSuggestedDate(suggestedDate);
+        return suggestionRepository.save(s);
+    }
+
+    private Suggestion seedWishlistSuggestion(Customer customer) {
+        Suggestion s = seedSuggestion(customer, SuggestionCategory.MONTHLY, "Wishlist pick");
+        s.setStatus(SuggestionStatus.WISHLIST);
         return suggestionRepository.save(s);
     }
 
@@ -414,6 +421,82 @@ class SuggestionIntegrationTest {
                 .header("Authorization", "Bearer " + user.token())
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(new RatingRequest(4))
+                .exchange()
+                .expectStatus().isNotFound();
+    }
+
+    @Test
+    void plan_wishlistWithTargetDate_promotesAndSetsDate() {
+        RegisteredUser user = registerCustomer(uniqueEmail("plan-with-date"));
+        Suggestion suggestion = seedWishlistSuggestion(user.customer());
+        LocalDate target = LocalDate.now().plusMonths(1);
+
+        client.put().uri("/api/suggestions/" + suggestion.getId() + "/plan")
+                .header("Authorization", "Bearer " + user.token())
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(new PlanRequest(target))
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody(SuggestionDto.class)
+                .value(dto -> {
+                    assertThat(dto.status()).isEqualTo(SuggestionStatus.ACCEPTED);
+                    assertThat(dto.suggestedDate()).isEqualTo(target);
+                });
+    }
+
+    @Test
+    void plan_wishlistWithoutTargetDate_promotesOnly() {
+        RegisteredUser user = registerCustomer(uniqueEmail("plan-no-date"));
+        Suggestion suggestion = seedWishlistSuggestion(user.customer());
+
+        client.put().uri("/api/suggestions/" + suggestion.getId() + "/plan")
+                .header("Authorization", "Bearer " + user.token())
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(new PlanRequest(null))
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody(SuggestionDto.class)
+                .value(dto -> assertThat(dto.status()).isEqualTo(SuggestionStatus.ACCEPTED));
+    }
+
+    @Test
+    void plan_nonWishlistSuggestion_returnsBadRequestProblemDetail() {
+        RegisteredUser user = registerCustomer(uniqueEmail("plan-non-wishlist"));
+        Suggestion suggestion = seedSuggestion(user.customer(), SuggestionCategory.DAILY, "Still pending");
+
+        client.put().uri("/api/suggestions/" + suggestion.getId() + "/plan")
+                .header("Authorization", "Bearer " + user.token())
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(new PlanRequest(null))
+                .exchange()
+                .expectStatus().isBadRequest()
+                .expectBody(Map.class)
+                .value(body -> assertThat(body.get("detail")).isEqualTo("Only wishlist suggestions can be planned"));
+    }
+
+    @Test
+    void plan_pastTargetDate_returnsValidationProblemDetail() {
+        RegisteredUser user = registerCustomer(uniqueEmail("plan-past-date"));
+        Suggestion suggestion = seedWishlistSuggestion(user.customer());
+
+        client.put().uri("/api/suggestions/" + suggestion.getId() + "/plan")
+                .header("Authorization", "Bearer " + user.token())
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(new PlanRequest(LocalDate.now().minusDays(1)))
+                .exchange()
+                .expectStatus().isBadRequest()
+                .expectBody(Map.class)
+                .value(body -> assertThat(body).containsKey("errors"));
+    }
+
+    @Test
+    void plan_unknownSuggestionId_returnsNotFound() {
+        RegisteredUser user = registerCustomer(uniqueEmail("plan-unknown"));
+
+        client.put().uri("/api/suggestions/999999/plan")
+                .header("Authorization", "Bearer " + user.token())
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(new PlanRequest(null))
                 .exchange()
                 .expectStatus().isNotFound();
     }

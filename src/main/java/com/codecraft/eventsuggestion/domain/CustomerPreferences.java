@@ -1,9 +1,12 @@
 package com.codecraft.eventsuggestion.domain;
 
+import com.codecraft.eventsuggestion.domain.enums.SuggestionCategory;
 import jakarta.persistence.*;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 @Entity
 @Table(name = "customer_preferences")
@@ -34,6 +37,15 @@ public class CustomerPreferences {
 
     private boolean likesTraveling;
     private boolean likesNightlife;
+
+    /** When true, the scheduled batch jobs skip generating any new suggestions for this customer */
+    private boolean vacationMode = false;
+
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "pref_paused_categories", joinColumns = @JoinColumn(name = "preference_id"))
+    @Enumerated(EnumType.STRING)
+    @Column(name = "category")
+    private Set<SuggestionCategory> pausedCategories = new HashSet<>();
 
     @Column(length = 1000)
     private String additionalNotes;
@@ -66,6 +78,12 @@ public class CustomerPreferences {
 
     public boolean isLikesNightlife() { return likesNightlife; }
     public void setLikesNightlife(boolean likesNightlife) { this.likesNightlife = likesNightlife; }
+
+    public boolean isVacationMode() { return vacationMode; }
+    public void setVacationMode(boolean vacationMode) { this.vacationMode = vacationMode; }
+
+    public Set<SuggestionCategory> getPausedCategories() { return pausedCategories; }
+    public void setPausedCategories(Set<SuggestionCategory> pausedCategories) { this.pausedCategories = pausedCategories; }
 
     public String getAdditionalNotes() { return additionalNotes; }
     public void setAdditionalNotes(String additionalNotes) { this.additionalNotes = additionalNotes; }

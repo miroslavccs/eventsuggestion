@@ -4,6 +4,7 @@ import com.codecraft.eventsuggestion.domain.Address;
 import com.codecraft.eventsuggestion.domain.Customer;
 import com.codecraft.eventsuggestion.domain.CustomerPreferences;
 import com.codecraft.eventsuggestion.domain.enums.Gender;
+import com.codecraft.eventsuggestion.domain.enums.SuggestionCategory;
 
 import java.util.List;
 
@@ -23,7 +24,9 @@ public record CustomerProfileDto(
         List<String> interests,
         boolean likesTraveling,
         boolean likesNightlife,
-        String additionalNotes
+        String additionalNotes,
+        boolean vacationMode,
+        List<SuggestionCategory> pausedCategories
 ) {
     public record AddressDto(String street, String city, String state, String country, String zipCode) {
         public static AddressDto from(Address a) {
@@ -48,7 +51,9 @@ public record CustomerProfileDto(
                 p != null ? p.getInterests() : List.of(),
                 p != null && p.isLikesTraveling(),
                 p != null && p.isLikesNightlife(),
-                p != null ? p.getAdditionalNotes() : null
+                p != null ? p.getAdditionalNotes() : null,
+                p != null && p.isVacationMode(),
+                p != null ? List.copyOf(p.getPausedCategories()) : List.of()
         );
     }
 }
