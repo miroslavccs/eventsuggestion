@@ -222,9 +222,40 @@ All settings can be overridden via environment variables:
 | `app.jwt.secret` | `JWT_SECRET` | dev default |
 | `app.jwt.expiration-ms` | — | `86400000` (24 h) |
 
+Render deployments compose `spring.datasource.url` from `DB_HOST`/`DB_PORT`/`DB_NAME` instead (see
+below) — `DB_URL` always takes priority when set.
+
+---
+
+## Deploying to Render
+
+A `render.yaml` [Blueprint](https://render.com/docs/blueprint-spec) at the repo root provisions a
+free web service (built from the existing `Dockerfile`) and a free Postgres instance in one pass.
+
+1. Push this repo to GitHub.
+2. In the Render dashboard: **New → Blueprint**, connect the GitHub repo. Render detects
+   `render.yaml` and shows both services (`eventsuggestion` web service, `eventsuggestion-db`
+   Postgres) for review.
+3. Before (or right after) the first deploy, open the `eventsuggestion` service's **Environment**
+   tab and set `OPENAI_API_KEY` — it's intentionally left out of `render.yaml` (`sync: false`) so
+   your key never ends up in the repo. `JWT_SECRET` is generated automatically by Render.
+4. Click **Apply**/**Deploy**. Flyway runs the existing migrations automatically against the new
+   Postgres on startup, same as any other environment.
+5. Once live: `https://<your-service>.onrender.com/swagger-ui/index.html` to explore the API,
+   `/actuator/health` for a health check (also what Render itself polls).
+
+Free-tier caveats: the web service spins down after ~15 minutes of inactivity (the next request
+pays a cold-start delay), and the free Postgres instance is deleted after 90 days unless upgraded —
+fine for a demo/staging environment, not for anything that needs to stay always-on or keep data
+long-term.
+
 ---
 
 ## Changelog
+
+### 0.0.8
+- Added `render.yaml` to deploy to Render as a free web service + free Postgres via its Blueprint feature, reusing the existing `Dockerfile` unchanged.
+- `spring.datasource.url` now also composes from `DB_HOST`/`DB_PORT`/`DB_NAME` when `DB_URL` isn't set, since Render's Postgres only exposes those as separate values, not a ready JDBC URL. Local Docker Compose and `./mvnw spring-boot:run`, which set `DB_URL` directly, are unaffected.
 
 ### 0.0.7
 - Added vacation mode and per-category pause (`vacationMode`, `pausedCategories` on `CustomerPreferences`, settable via `PUT /api/customers/me`) — the three scheduled generation jobs skip a customer whose preferences have them paused; the on-demand `POST /generate` is unaffected.

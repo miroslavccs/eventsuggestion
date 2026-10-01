@@ -1,0 +1,38 @@
+databases:
+  - name: eventsuggestion-db
+    plan: free
+    databaseName: eventsuggestion
+    user: eventsuggestion
+
+services:
+  - type: web
+    name: eventsuggestion
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    healthCheckPath: /actuator/health
+    envVars:
+      - key: DB_HOST
+        fromDatabase:
+          name: eventsuggestion-db
+          property: host
+      - key: DB_PORT
+        fromDatabase:
+          name: eventsuggestion-db
+          property: port
+      - key: DB_NAME
+        fromDatabase:
+          name: eventsuggestion-db
+          property: database
+      - key: DB_USERNAME
+        fromDatabase:
+          name: eventsuggestion-db
+          property: user
+      - key: DB_PASSWORD
+        fromDatabase:
+          name: eventsuggestion-db
+          property: password
+      - key: JWT_SECRET
+        generateValue: true
+      - key: OPENAI_API_KEY
+        sync: false
