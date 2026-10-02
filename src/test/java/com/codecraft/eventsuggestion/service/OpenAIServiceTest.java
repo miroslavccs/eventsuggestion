@@ -1,6 +1,8 @@
 package com.codecraft.eventsuggestion.service;
 
 import com.codecraft.eventsuggestion.domain.Customer;
+import com.codecraft.eventsuggestion.domain.Suggestion;
+import com.codecraft.eventsuggestion.domain.SuggestionContent;
 import com.codecraft.eventsuggestion.domain.enums.SuggestionCategory;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.AfterEach;
@@ -35,6 +37,15 @@ class OpenAIServiceTest {
         c.setLastName("Doe");
         c.setAge(30);
         return c;
+    }
+
+    private Suggestion feedbackSuggestion() {
+        SuggestionContent content = new SuggestionContent();
+        content.setCategory(SuggestionCategory.DAILY);
+        content.setTitle("Test");
+        Suggestion s = new Suggestion();
+        s.setContent(content);
+        return s;
     }
 
     private String baseUrlOf(HttpServer server) {
@@ -76,7 +87,7 @@ class OpenAIServiceTest {
     void generateLearnedProfile_blankApiKey_returnsNull() {
         OpenAIService service = new OpenAIService("", "http://localhost:1", "gpt-4o", 2000, OBJECT_MAPPER);
 
-        String result = service.generateLearnedProfile(customer(), null, List.of(new com.codecraft.eventsuggestion.domain.Suggestion()));
+        String result = service.generateLearnedProfile(customer(), null, List.of(feedbackSuggestion()));
 
         assertThat(result).isNull();
     }
@@ -114,7 +125,7 @@ class OpenAIServiceTest {
         OpenAIService service = new OpenAIService("sk-test", baseUrlOf(server), "gpt-4o", 2000, OBJECT_MAPPER);
 
         String result = service.generateLearnedProfile(
-                customer(), null, List.of(new com.codecraft.eventsuggestion.domain.Suggestion()));
+                customer(), null, List.of(feedbackSuggestion()));
 
         assertThat(result).isEqualTo("Likes jazz, dislikes opera");
     }
@@ -149,7 +160,7 @@ class OpenAIServiceTest {
         OpenAIService service = new OpenAIService("sk-test", baseUrlOf(server), "gpt-4o", 2000, OBJECT_MAPPER);
 
         String result = service.generateLearnedProfile(
-                customer(), null, List.of(new com.codecraft.eventsuggestion.domain.Suggestion()));
+                customer(), null, List.of(feedbackSuggestion()));
 
         assertThat(result).isNull();
     }

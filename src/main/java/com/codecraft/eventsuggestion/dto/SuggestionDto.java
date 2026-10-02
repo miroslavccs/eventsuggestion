@@ -25,13 +25,14 @@ public record SuggestionDto(
         LocalDate snoozedUntil
 ) {
     public static SuggestionDto from(Suggestion s) {
+        var content = s.getContent();
         return new SuggestionDto(
                 s.getId(),
-                s.getCategory(),
-                s.getTitle(),
-                s.getDescription(),
-                s.getLocation(),
-                s.getEstimatedCost(),
+                content.getCategory(),
+                content.getTitle(),
+                content.getDescription(),
+                content.getLocation(),
+                content.getEstimatedCost(),
                 s.getSuggestedDate(),
                 s.getReasonForSuggestion(),
                 s.getStatus(),

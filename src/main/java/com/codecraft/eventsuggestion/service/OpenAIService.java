@@ -100,6 +100,44 @@ public class OpenAIService {
     }
 
     /**
+     * Calls OpenAI once to generate suggestions shared across every customer in a city+category
+     * cluster, avoiding one call per customer. No customer-specific personalization — callers are
+     * expected to fold in per-customer touches (e.g. a templated reason) afterward.
+     */
+    public List<SuggestionData> generateClusterSuggestions(String city, SuggestionCategory category, int count) {
+        if (isApiKeyMissing()) {
+            log.warn("OpenAI API key not configured — returning empty cluster suggestions");
+            return List.of();
+        }
+
+        String systemPrompt = buildSystemPrompt();
+        String userPrompt = buildClusterPrompt(city, category, count);
+
+        try {
+            Map<String, Object> requestBody = Map.of(
+                    "model", model,
+                    "messages", List.of(
+                            Map.of("role", "system", "content", systemPrompt),
+                            Map.of("role", "user", "content", userPrompt)
+                    ),
+                    "max_tokens", maxTokens,
+                    "response_format", Map.of("type", "json_object")
+            );
+
+            String responseJson = restClient.post()
+                    .uri("/chat/completions")
+                    .body(requestBody)
+                    .retrieve()
+                    .body(String.class);
+
+            return parseSuggestions(responseJson);
+        } catch (Exception e) {
+            log.error("OpenAI cluster API call failed for {}/{}: {}", city, category, e.getMessage());
+            return List.of();
+        }
+    }
+
+    /**
      * Asks OpenAI to analyse recent feedback and produce a brief learned-profile summary
      * that will be stored in CustomerPreferences and fed back into future prompts.
      */
@@ -178,18 +216,14 @@ public class OpenAIService {
         if (!feedback.isEmpty()) {
             sb.append("\nPAST SUGGESTION HISTORY:\n");
             for (Suggestion s : feedback) {
-                sb.append("- [").append(s.getStatus()).append("] \"").append(s.getTitle()).append("\"");
+                sb.append("- [").append(s.getStatus()).append("] \"").append(s.getContent().getTitle()).append("\"");
                 if (s.getFeedbackComment() != null) sb.append(" — comment: \"").append(s.getFeedbackComment()).append("\"");
                 sb.append("\n");
             }
         }
 
         sb.append("\nCATEGORY: ").append(category).append("\n");
-        sb.append(switch (category) {
-            case DAILY -> "Focus on nearby events, concerts, plays, sport events within the next 1-3 days.";
-            case WEEKEND -> "Focus on weekend getaways and area events requiring more time (upcoming weekend).";
-            case MONTHLY -> "Focus on longer trips, seasonal activities, travel destinations (upcoming month).";
-        }).append("\n");
+        sb.append(categoryGuidance(category)).append("\n");
 
         sb.append("\nToday's date: ").append(LocalDate.now()).append("\n");
 
@@ -213,14 +247,52 @@ public class OpenAIService {
         return sb.toString();
     }
 
+    private String buildClusterPrompt(String city, SuggestionCategory category, int count) {
+        StringBuilder sb = new StringBuilder();
+
+        sb.append("Generate exactly ").append(count)
+          .append(" broadly appealing suggestions for people in ").append(city).append(".\n");
+
+        sb.append("\nCATEGORY: ").append(category).append("\n");
+        sb.append(categoryGuidance(category)).append("\n");
+
+        sb.append("\nToday's date: ").append(LocalDate.now()).append("\n");
+
+        sb.append("""
+
+                Respond with a JSON object containing a "suggestions" array:
+                {
+                  "suggestions": [
+                    {
+                      "title": "...",
+                      "description": "2-3 sentence description",
+                      "location": "city, country or venue name",
+                      "estimatedCost": "e.g. Free, $20-50, $200+",
+                      "suggestedDate": "YYYY-MM-DD"
+                    }
+                  ]
+                }
+                """);
+
+        return sb.toString();
+    }
+
+    private String categoryGuidance(SuggestionCategory category) {
+        return switch (category) {
+            case DAILY -> "Focus on nearby events, concerts, plays, sport events within the next 1-3 days.";
+            case WEEKEND -> "Focus on weekend getaways and area events requiring more time (upcoming weekend).";
+            case MONTHLY -> "Focus on longer trips, seasonal activities, travel destinations (upcoming month).";
+        };
+    }
+
     private String buildLearningPrompt(Customer customer, List<Suggestion> feedback) {
         StringBuilder sb = new StringBuilder();
         sb.append("Analyse this customer's suggestion feedback and write 3-5 concise bullet points summarising their preferences, dislikes, and behavioural patterns to guide future recommendations.\n\n");
         sb.append("Customer: ").append(customer.getFirstName()).append(", age ").append(customer.getAge()).append("\n\n");
         sb.append("Feedback history:\n");
         for (Suggestion s : feedback) {
-            sb.append("- [").append(s.getStatus()).append("] ").append(s.getCategory())
-              .append(": \"").append(s.getTitle()).append("\"");
+            sb.append("- [").append(s.getStatus()).append("] ").append(s.getContent().getCategory())
+              .append(": \"").append(s.getContent().getTitle()).append("\"");
             if (s.getFeedbackComment() != null) sb.append(" — \"").append(s.getFeedbackComment()).append("\"");
             sb.append("\n");
         }

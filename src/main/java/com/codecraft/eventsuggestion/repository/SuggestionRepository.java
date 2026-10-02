@@ -13,18 +13,24 @@ import java.util.Optional;
 
 public interface SuggestionRepository extends JpaRepository<Suggestion, Long> {
 
-    List<Suggestion> findByCustomerIdOrderByCreatedAtDesc(Long customerId);
+    @Query("SELECT s FROM Suggestion s JOIN FETCH s.content WHERE s.customer.id = :customerId ORDER BY s.createdAt DESC")
+    List<Suggestion> findByCustomerIdOrderByCreatedAtDesc(@Param("customerId") Long customerId);
 
-    List<Suggestion> findByCustomerIdAndCategoryOrderByCreatedAtDesc(Long customerId, SuggestionCategory category);
+    @Query("SELECT s FROM Suggestion s JOIN FETCH s.content WHERE s.customer.id = :customerId AND s.content.category = :category " +
+           "ORDER BY s.createdAt DESC")
+    List<Suggestion> findByCustomerIdAndCategoryOrderByCreatedAtDesc(@Param("customerId") Long customerId,
+                                                                      @Param("category") SuggestionCategory category);
 
-    @Query("SELECT s FROM Suggestion s WHERE s.customer.id = :customerId AND s.notificationRead = false " +
+    @Query("SELECT s FROM Suggestion s JOIN FETCH s.content WHERE s.customer.id = :customerId AND s.notificationRead = false " +
            "AND (s.snoozedUntil IS NULL OR s.snoozedUntil <= CURRENT_DATE) ORDER BY s.createdAt DESC")
     List<Suggestion> findActiveNotifications(@Param("customerId") Long customerId);
 
-    Optional<Suggestion> findByIdAndCustomerId(Long id, Long customerId);
+    @Query("SELECT s FROM Suggestion s JOIN FETCH s.content WHERE s.id = :id AND s.customer.id = :customerId")
+    Optional<Suggestion> findByIdAndCustomerId(@Param("id") Long id, @Param("customerId") Long customerId);
 
     long countByCustomerIdAndStatusNot(Long customerId, SuggestionStatus status);
 
-    @Query("SELECT s FROM Suggestion s WHERE s.customer.id = :customerId AND s.status <> 'PENDING' ORDER BY s.respondedAt DESC")
+    @Query("SELECT s FROM Suggestion s JOIN FETCH s.content WHERE s.customer.id = :customerId AND s.status <> 'PENDING' " +
+           "ORDER BY s.respondedAt DESC")
     List<Suggestion> findRecentFeedback(@Param("customerId") Long customerId, Pageable pageable);
 }

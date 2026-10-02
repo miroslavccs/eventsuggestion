@@ -1,6 +1,5 @@
 package com.codecraft.eventsuggestion.domain;
 
-import com.codecraft.eventsuggestion.domain.enums.SuggestionCategory;
 import com.codecraft.eventsuggestion.domain.enums.SuggestionStatus;
 import jakarta.persistence.*;
 
@@ -19,18 +18,16 @@ public class Suggestion {
     @JoinColumn(name = "customer_id", nullable = false)
     private Customer customer;
 
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
-    private SuggestionCategory category;
+    /** The shared, AI-generated content this suggestion points at — may be shared with other customers. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "content_id", nullable = false)
+    private SuggestionContent content;
 
-    @Column(nullable = false)
-    private String title;
-
-    @Column(length = 2000)
-    private String description;
-
-    private String location;
-    private String estimatedCost;
+    /**
+     * Per-customer effective date — initialized from {@link SuggestionContent#getSuggestedDate()} at
+     * assignment time, but independently mutable (e.g. via the plan action), so it must not live on
+     * the shared content.
+     */
     private LocalDate suggestedDate;
 
     @Column(length = 1000)
@@ -68,20 +65,8 @@ public class Suggestion {
     public Customer getCustomer() { return customer; }
     public void setCustomer(Customer customer) { this.customer = customer; }
 
-    public SuggestionCategory getCategory() { return category; }
-    public void setCategory(SuggestionCategory category) { this.category = category; }
-
-    public String getTitle() { return title; }
-    public void setTitle(String title) { this.title = title; }
-
-    public String getDescription() { return description; }
-    public void setDescription(String description) { this.description = description; }
-
-    public String getLocation() { return location; }
-    public void setLocation(String location) { this.location = location; }
-
-    public String getEstimatedCost() { return estimatedCost; }
-    public void setEstimatedCost(String estimatedCost) { this.estimatedCost = estimatedCost; }
+    public SuggestionContent getContent() { return content; }
+    public void setContent(SuggestionContent content) { this.content = content; }
 
     public LocalDate getSuggestedDate() { return suggestedDate; }
     public void setSuggestedDate(LocalDate suggestedDate) { this.suggestedDate = suggestedDate; }

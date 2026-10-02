@@ -206,6 +206,12 @@ curl -s -X PUT http://localhost:8080/api/suggestions/4/plan \
 | `0 0 9 * * FRI` | WEEKEND | Every Friday at 09:00 |
 | `0 0 10 1 * *` | MONTHLY | 1st of each month at 10:00 |
 
+Each run groups non-paused customers by city + category and calls OpenAI **once per cluster**
+rather than once per customer, sharing the generated content (title/description/location/etc.)
+across everyone in it — each customer still gets their own status/feedback/rating and a templated,
+non-AI personalized reason. A customer with no city set is generated individually, same as before.
+The on-demand `POST /generate` endpoint below is unaffected — always one full, personalized call.
+
 ---
 
 ## Configuration reference
@@ -252,6 +258,11 @@ long-term.
 ---
 
 ## Changelog
+
+### 0.0.9
+- Scheduled suggestion generation now clusters non-paused customers by city + category and calls OpenAI once per cluster instead of once per customer, cutting AI costs. Suggestion content (`SuggestionContent`) is now a separate, shareable entity; `Suggestion` is the per-customer assignment (status, feedback, rating, snooze, and a personalized reason) pointing at it.
+- Clustered suggestions get a non-AI, templated reason (matching the customer's own stated interests/hobbies/sports against the suggestion text, falling back to the existing default). On-demand `POST /generate` and customers with no city set are unaffected — still one full, personalized AI call each, keeping the AI's own reason.
+- New migration `V4__suggestion_content_split.sql`. No production deployment exists yet, so this clears existing `suggestions` rows rather than migrating them in place.
 
 ### 0.0.8
 - Added `render.yaml` to deploy to Render as a free web service + free Postgres via its Blueprint feature, reusing the existing `Dockerfile` unchanged.

@@ -2,6 +2,7 @@ package com.codecraft.eventsuggestion;
 
 import com.codecraft.eventsuggestion.domain.Customer;
 import com.codecraft.eventsuggestion.domain.Suggestion;
+import com.codecraft.eventsuggestion.domain.SuggestionContent;
 import com.codecraft.eventsuggestion.domain.enums.SuggestionCategory;
 import com.codecraft.eventsuggestion.domain.enums.SuggestionStatus;
 import com.codecraft.eventsuggestion.dto.FeedbackRequest;
@@ -12,6 +13,7 @@ import com.codecraft.eventsuggestion.dto.RegisterRequest;
 import com.codecraft.eventsuggestion.dto.SnoozeRequest;
 import com.codecraft.eventsuggestion.dto.SuggestionDto;
 import com.codecraft.eventsuggestion.repository.CustomerRepository;
+import com.codecraft.eventsuggestion.repository.SuggestionContentRepository;
 import com.codecraft.eventsuggestion.repository.SuggestionRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -38,6 +40,9 @@ class SuggestionIntegrationTest {
 
     @Autowired
     private SuggestionRepository suggestionRepository;
+
+    @Autowired
+    private SuggestionContentRepository suggestionContentRepository;
 
     private RestTestClient client;
 
@@ -69,10 +74,14 @@ class SuggestionIntegrationTest {
     }
 
     private Suggestion seedSuggestion(Customer customer, SuggestionCategory category, String title) {
+        SuggestionContent content = new SuggestionContent();
+        content.setCategory(category);
+        content.setTitle(title);
+        content = suggestionContentRepository.save(content);
+
         Suggestion s = new Suggestion();
         s.setCustomer(customer);
-        s.setCategory(category);
-        s.setTitle(title);
+        s.setContent(content);
         s.setStatus(SuggestionStatus.PENDING);
         s.setNotificationRead(false);
         return suggestionRepository.save(s);

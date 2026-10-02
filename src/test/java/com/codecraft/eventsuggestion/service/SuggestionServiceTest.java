@@ -1,14 +1,17 @@
 package com.codecraft.eventsuggestion.service;
 
+import com.codecraft.eventsuggestion.domain.Address;
 import com.codecraft.eventsuggestion.domain.Customer;
 import com.codecraft.eventsuggestion.domain.CustomerPreferences;
 import com.codecraft.eventsuggestion.domain.Suggestion;
+import com.codecraft.eventsuggestion.domain.SuggestionContent;
 import com.codecraft.eventsuggestion.domain.enums.SuggestionCategory;
 import com.codecraft.eventsuggestion.domain.enums.SuggestionStatus;
 import com.codecraft.eventsuggestion.dto.FeedbackRequest;
 import com.codecraft.eventsuggestion.dto.SuggestionDto;
 import com.codecraft.eventsuggestion.repository.CustomerPreferencesRepository;
 import com.codecraft.eventsuggestion.repository.CustomerRepository;
+import com.codecraft.eventsuggestion.repository.SuggestionContentRepository;
 import com.codecraft.eventsuggestion.repository.SuggestionRepository;
 import jakarta.persistence.EntityNotFoundException;
 import org.junit.jupiter.api.Test;
@@ -35,6 +38,8 @@ class SuggestionServiceTest {
     @Mock
     private SuggestionRepository suggestionRepository;
     @Mock
+    private SuggestionContentRepository suggestionContentRepository;
+    @Mock
     private CustomerRepository customerRepository;
     @Mock
     private CustomerPreferencesRepository preferencesRepository;
@@ -42,7 +47,8 @@ class SuggestionServiceTest {
     private OpenAIService openAIService;
 
     private SuggestionService newService() {
-        return new SuggestionService(suggestionRepository, customerRepository, preferencesRepository, openAIService);
+        return new SuggestionService(suggestionRepository, suggestionContentRepository,
+                customerRepository, preferencesRepository, openAIService);
     }
 
     private Customer customer(String email) {
@@ -51,6 +57,34 @@ class SuggestionServiceTest {
         c.setFirstName("Jane");
         c.setLastName("Doe");
         return c;
+    }
+
+    private Customer customerInCity(String email, String city) {
+        Customer c = customer(email);
+        c.setAddress(new Address(null, city, null, null, null));
+        return c;
+    }
+
+    private SuggestionContent content(SuggestionCategory category, String title, String description) {
+        SuggestionContent c = new SuggestionContent();
+        c.setCategory(category);
+        c.setTitle(title);
+        c.setDescription(description);
+        c.setSuggestedDate(LocalDate.now().plusDays(1));
+        return c;
+    }
+
+    /** A bare per-customer Suggestion with a minimal linked content — for tests exercising
+     *  entity-level fields (status, dates, etc.) that still flow through SuggestionDto.from(). */
+    private Suggestion suggestionWithContent() {
+        Suggestion s = new Suggestion();
+        s.setContent(content(SuggestionCategory.DAILY, "Test", "Test description"));
+        return s;
+    }
+
+    private void stubSaveAllPassthrough() {
+        when(suggestionContentRepository.saveAll(anyList())).thenAnswer(inv -> inv.getArgument(0));
+        when(suggestionRepository.saveAll(anyList())).thenAnswer(inv -> inv.getArgument(0));
     }
 
     // ─── generateForCustomer ────────────────────────────────────────────────
@@ -64,7 +98,7 @@ class SuggestionServiceTest {
         when(openAIService.generateSuggestions(eq(customer), isNull(), anyList(), eq(SuggestionCategory.DAILY), eq(3)))
                 .thenReturn(List.of(new OpenAIService.SuggestionData(
                         "Jazz night", "Live jazz", "London", "$20", "2027-01-01", "Matches interests")));
-        when(suggestionRepository.saveAll(anyList())).thenAnswer(inv -> inv.getArgument(0));
+        stubSaveAllPassthrough();
 
         List<SuggestionDto> result = service.generateForCustomer(customer, SuggestionCategory.DAILY);
 
@@ -74,8 +108,8 @@ class SuggestionServiceTest {
         Suggestion saved = captor.getValue().get(0);
         assertThat(saved.getStatus()).isEqualTo(SuggestionStatus.PENDING);
         assertThat(saved.isNotificationRead()).isFalse();
-        assertThat(saved.getCategory()).isEqualTo(SuggestionCategory.DAILY);
-        assertThat(saved.getTitle()).isEqualTo("Jazz night");
+        assertThat(saved.getContent().getCategory()).isEqualTo(SuggestionCategory.DAILY);
+        assertThat(saved.getContent().getTitle()).isEqualTo("Jazz night");
         assertThat(saved.getSuggestedDate()).isEqualTo(LocalDate.of(2027, 1, 1));
     }
 
@@ -86,7 +120,7 @@ class SuggestionServiceTest {
         when(preferencesRepository.findByCustomer(customer)).thenReturn(Optional.empty());
         when(suggestionRepository.findRecentFeedback(any(), any(Pageable.class))).thenReturn(List.of());
         when(openAIService.generateSuggestions(any(), any(), anyList(), any(), anyInt())).thenReturn(List.of());
-        when(suggestionRepository.saveAll(anyList())).thenAnswer(inv -> inv.getArgument(0));
+        stubSaveAllPassthrough();
 
         List<SuggestionDto> result = service.generateForCustomer(customer, SuggestionCategory.WEEKEND);
 
@@ -123,7 +157,7 @@ class SuggestionServiceTest {
         when(suggestionRepository.findRecentFeedback(any(), any(Pageable.class))).thenReturn(List.of());
         when(openAIService.generateSuggestions(any(), any(), anyList(), any(), anyInt()))
                 .thenReturn(List.of(new OpenAIService.SuggestionData("T", "D", "L", "C", suggestedDate, "R")));
-        when(suggestionRepository.saveAll(anyList())).thenAnswer(inv -> inv.getArgument(0));
+        stubSaveAllPassthrough();
 
         List<SuggestionDto> result = service.generateForCustomer(customer, category);
         return result.get(0).suggestedDate();
@@ -134,7 +168,7 @@ class SuggestionServiceTest {
     @Test
     void getSuggestions_nullCategory_usesFindAllForCustomer() {
         SuggestionService service = newService();
-        when(suggestionRepository.findByCustomerIdOrderByCreatedAtDesc(1L)).thenReturn(List.of(new Suggestion()));
+        when(suggestionRepository.findByCustomerIdOrderByCreatedAtDesc(1L)).thenReturn(List.of(suggestionWithContent()));
 
         List<SuggestionDto> result = service.getSuggestions(1L, null);
 
@@ -146,7 +180,7 @@ class SuggestionServiceTest {
     void getSuggestions_withCategory_usesCategoryFilteredQuery() {
         SuggestionService service = newService();
         when(suggestionRepository.findByCustomerIdAndCategoryOrderByCreatedAtDesc(1L, SuggestionCategory.DAILY))
-                .thenReturn(List.of(new Suggestion()));
+                .thenReturn(List.of(suggestionWithContent()));
 
         List<SuggestionDto> result = service.getSuggestions(1L, SuggestionCategory.DAILY);
 
@@ -158,7 +192,7 @@ class SuggestionServiceTest {
     void getNotifications_mapsUnreadSuggestions() {
         SuggestionService service = newService();
         when(suggestionRepository.findActiveNotifications(1L))
-                .thenReturn(List.of(new Suggestion()));
+                .thenReturn(List.of(suggestionWithContent()));
 
         assertThat(service.getNotifications(1L)).hasSize(1);
     }
@@ -188,7 +222,7 @@ class SuggestionServiceTest {
     @Test
     void provideFeedback_happyPath_setsFieldsBeforeSaving() {
         SuggestionService service = newService();
-        Suggestion suggestion = new Suggestion();
+        Suggestion suggestion = suggestionWithContent();
         when(suggestionRepository.findByIdAndCustomerId(1L, 1L)).thenReturn(Optional.of(suggestion));
         when(suggestionRepository.save(any(Suggestion.class))).thenAnswer(inv -> inv.getArgument(0));
         when(suggestionRepository.countByCustomerIdAndStatusNot(1L, SuggestionStatus.PENDING)).thenReturn(3L);
@@ -204,7 +238,7 @@ class SuggestionServiceTest {
     @Test
     void provideFeedback_countIsMultipleOfFive_triggersLearningRefresh() {
         SuggestionService service = spy(newService());
-        Suggestion suggestion = new Suggestion();
+        Suggestion suggestion = suggestionWithContent();
         when(suggestionRepository.findByIdAndCustomerId(1L, 1L)).thenReturn(Optional.of(suggestion));
         when(suggestionRepository.save(any(Suggestion.class))).thenAnswer(inv -> inv.getArgument(0));
         when(suggestionRepository.countByCustomerIdAndStatusNot(1L, SuggestionStatus.PENDING)).thenReturn(5L);
@@ -217,7 +251,7 @@ class SuggestionServiceTest {
     @Test
     void provideFeedback_countIsNotMultipleOfFive_doesNotTriggerLearningRefresh() {
         SuggestionService service = spy(newService());
-        Suggestion suggestion = new Suggestion();
+        Suggestion suggestion = suggestionWithContent();
         when(suggestionRepository.findByIdAndCustomerId(1L, 1L)).thenReturn(Optional.of(suggestion));
         when(suggestionRepository.save(any(Suggestion.class))).thenAnswer(inv -> inv.getArgument(0));
         when(suggestionRepository.countByCustomerIdAndStatusNot(1L, SuggestionStatus.PENDING)).thenReturn(3L);
@@ -328,7 +362,7 @@ class SuggestionServiceTest {
     @Test
     void snoozeSuggestion_pendingSuggestion_setsSnoozedUntil() {
         SuggestionService service = newService();
-        Suggestion suggestion = new Suggestion();
+        Suggestion suggestion = suggestionWithContent();
         suggestion.setStatus(SuggestionStatus.PENDING);
         when(suggestionRepository.findByIdAndCustomerId(1L, 1L)).thenReturn(Optional.of(suggestion));
         when(suggestionRepository.save(any(Suggestion.class))).thenAnswer(inv -> inv.getArgument(0));
@@ -367,7 +401,7 @@ class SuggestionServiceTest {
     @Test
     void rateSuggestion_acceptedAndPastDated_setsRating() {
         SuggestionService service = newService();
-        Suggestion suggestion = new Suggestion();
+        Suggestion suggestion = suggestionWithContent();
         suggestion.setStatus(SuggestionStatus.ACCEPTED);
         suggestion.setSuggestedDate(LocalDate.now().minusDays(1));
         when(suggestionRepository.findByIdAndCustomerId(1L, 1L)).thenReturn(Optional.of(suggestion));
@@ -420,7 +454,7 @@ class SuggestionServiceTest {
     @Test
     void planSuggestion_wishlistWithTargetDate_promotesAndSetsDate() {
         SuggestionService service = newService();
-        Suggestion suggestion = new Suggestion();
+        Suggestion suggestion = suggestionWithContent();
         suggestion.setStatus(SuggestionStatus.WISHLIST);
         suggestion.setSuggestedDate(LocalDate.now().plusDays(1));
         when(suggestionRepository.findByIdAndCustomerId(1L, 1L)).thenReturn(Optional.of(suggestion));
@@ -436,7 +470,7 @@ class SuggestionServiceTest {
     @Test
     void planSuggestion_wishlistWithoutTargetDate_promotesAndKeepsExistingDate() {
         SuggestionService service = newService();
-        Suggestion suggestion = new Suggestion();
+        Suggestion suggestion = suggestionWithContent();
         suggestion.setStatus(SuggestionStatus.WISHLIST);
         LocalDate existingDate = LocalDate.now().plusDays(5);
         suggestion.setSuggestedDate(existingDate);
@@ -471,7 +505,7 @@ class SuggestionServiceTest {
         verify(suggestionRepository, never()).save(any());
     }
 
-    // ─── Reason fallback ─────────────────────────────────────────────────────
+    // ─── Reason fallback (individual/on-demand path) ─────────────────────────
 
     @Test
     void generateForCustomer_blankReason_fallsBackToDefaultReason() {
@@ -481,7 +515,7 @@ class SuggestionServiceTest {
         when(suggestionRepository.findRecentFeedback(any(), any(Pageable.class))).thenReturn(List.of());
         when(openAIService.generateSuggestions(any(), any(), anyList(), any(), anyInt()))
                 .thenReturn(List.of(new OpenAIService.SuggestionData("T", "D", "L", "C", null, "  ")));
-        when(suggestionRepository.saveAll(anyList())).thenAnswer(inv -> inv.getArgument(0));
+        stubSaveAllPassthrough();
 
         List<SuggestionDto> result = service.generateForCustomer(customer, SuggestionCategory.DAILY);
 
@@ -497,7 +531,7 @@ class SuggestionServiceTest {
         when(suggestionRepository.findRecentFeedback(any(), any(Pageable.class))).thenReturn(List.of());
         when(openAIService.generateSuggestions(any(), any(), anyList(), any(), anyInt()))
                 .thenReturn(List.of(new OpenAIService.SuggestionData("T", "D", "L", "C", null, "Matches your interests")));
-        when(suggestionRepository.saveAll(anyList())).thenAnswer(inv -> inv.getArgument(0));
+        stubSaveAllPassthrough();
 
         List<SuggestionDto> result = service.generateForCustomer(customer, SuggestionCategory.DAILY);
 
@@ -545,14 +579,14 @@ class SuggestionServiceTest {
         when(suggestionRepository.findRecentFeedback(any(), any(Pageable.class))).thenReturn(List.of());
         when(openAIService.generateSuggestions(eq(customer), eq(prefs), anyList(), eq(SuggestionCategory.DAILY), eq(3)))
                 .thenReturn(List.of());
-        when(suggestionRepository.saveAll(anyList())).thenAnswer(inv -> inv.getArgument(0));
+        stubSaveAllPassthrough();
 
         service.generateDailySuggestions();
 
         verify(openAIService).generateSuggestions(eq(customer), eq(prefs), anyList(), eq(SuggestionCategory.DAILY), eq(3));
     }
 
-    // ─── Scheduled batch resilience ──────────────────────────────────────────
+    // ─── Scheduled batch resilience (city-less customers → individual path) ──
 
     @Test
     void generateDailySuggestions_oneCustomerFailing_doesNotStopOthers() {
@@ -566,7 +600,7 @@ class SuggestionServiceTest {
         when(suggestionRepository.findRecentFeedback(any(), any(Pageable.class))).thenReturn(List.of());
         when(openAIService.generateSuggestions(eq(succeeding), isNull(), anyList(), eq(SuggestionCategory.DAILY), eq(3)))
                 .thenReturn(List.of(new OpenAIService.SuggestionData("T", "D", "L", "C", null, "R")));
-        when(suggestionRepository.saveAll(anyList())).thenAnswer(inv -> inv.getArgument(0));
+        stubSaveAllPassthrough();
 
         assertThatCode(service::generateDailySuggestions).doesNotThrowAnyException();
 
@@ -582,7 +616,7 @@ class SuggestionServiceTest {
         when(preferencesRepository.findByCustomer(customer)).thenReturn(Optional.empty());
         when(suggestionRepository.findRecentFeedback(any(), any(Pageable.class))).thenReturn(List.of());
         when(openAIService.generateSuggestions(any(), any(), anyList(), any(), anyInt())).thenReturn(List.of());
-        when(suggestionRepository.saveAll(anyList())).thenAnswer(inv -> inv.getArgument(0));
+        stubSaveAllPassthrough();
 
         service.generateWeekendSuggestions();
 
@@ -597,10 +631,106 @@ class SuggestionServiceTest {
         when(preferencesRepository.findByCustomer(customer)).thenReturn(Optional.empty());
         when(suggestionRepository.findRecentFeedback(any(), any(Pageable.class))).thenReturn(List.of());
         when(openAIService.generateSuggestions(any(), any(), anyList(), any(), anyInt())).thenReturn(List.of());
-        when(suggestionRepository.saveAll(anyList())).thenAnswer(inv -> inv.getArgument(0));
+        stubSaveAllPassthrough();
 
         service.generateMonthlySuggestions();
 
         verify(openAIService).generateSuggestions(eq(customer), isNull(), anyList(), eq(SuggestionCategory.MONTHLY), eq(3));
+    }
+
+    // ─── Clustering (customers sharing a city) ───────────────────────────────
+
+    @Test
+    void generateDailySuggestions_customersSharingCity_shareOneClusterCall() {
+        SuggestionService service = newService();
+        Customer alice = customerInCity("alice@example.com", "London");
+        Customer bob = customerInCity("bob@example.com", "London");
+        when(customerRepository.findAll()).thenReturn(List.of(alice, bob));
+        when(preferencesRepository.findByCustomer(alice)).thenReturn(Optional.empty());
+        when(preferencesRepository.findByCustomer(bob)).thenReturn(Optional.empty());
+        when(openAIService.generateClusterSuggestions(eq("London"), eq(SuggestionCategory.DAILY), anyInt()))
+                .thenReturn(List.of(new OpenAIService.SuggestionData("Jazz night", "Live jazz", "London", "$20", null, null)));
+        stubSaveAllPassthrough();
+
+        service.generateDailySuggestions();
+
+        verify(openAIService, times(1)).generateClusterSuggestions(eq("London"), eq(SuggestionCategory.DAILY), anyInt());
+        verify(openAIService, never()).generateSuggestions(any(), any(), anyList(), any(), anyInt());
+
+        ArgumentCaptor<List<Suggestion>> captor = ArgumentCaptor.forClass(List.class);
+        verify(suggestionRepository).saveAll(captor.capture());
+        assertThat(captor.getValue()).hasSize(2); // one assignment per customer, sharing the one content row
+        assertThat(captor.getValue().get(0).getContent()).isSameAs(captor.getValue().get(1).getContent());
+    }
+
+    @Test
+    void generateDailySuggestions_clusterApiReturnsEmpty_noAssignmentsSaved() {
+        SuggestionService service = newService();
+        Customer alice = customerInCity("alice@example.com", "London");
+        when(customerRepository.findAll()).thenReturn(List.of(alice));
+        when(preferencesRepository.findByCustomer(alice)).thenReturn(Optional.empty());
+        when(openAIService.generateClusterSuggestions(eq("London"), eq(SuggestionCategory.DAILY), anyInt()))
+                .thenReturn(List.of());
+
+        service.generateDailySuggestions();
+
+        verify(suggestionContentRepository, never()).saveAll(any());
+        verify(suggestionRepository, never()).saveAll(any());
+    }
+
+    @Test
+    void generateDailySuggestions_largerCluster_requestsMoreSuggestions() {
+        SuggestionService service = newService();
+        List<Customer> customers = java.util.stream.IntStream.range(0, 20)
+                .mapToObj(i -> customerInCity("c" + i + "@example.com", "Berlin"))
+                .toList();
+        when(customerRepository.findAll()).thenReturn(customers);
+        customers.forEach(c -> when(preferencesRepository.findByCustomer(c)).thenReturn(Optional.empty()));
+        when(openAIService.generateClusterSuggestions(eq("Berlin"), eq(SuggestionCategory.DAILY), anyInt()))
+                .thenReturn(List.of());
+
+        service.generateDailySuggestions();
+
+        // 20 customers -> the ">=20" tier -> 7 requested
+        verify(openAIService).generateClusterSuggestions("Berlin", SuggestionCategory.DAILY, 7);
+    }
+
+    @Test
+    void generateDailySuggestions_matchingInterest_usesTemplatedReason() {
+        SuggestionService service = newService();
+        Customer alice = customerInCity("alice@example.com", "London");
+        CustomerPreferences prefs = new CustomerPreferences();
+        prefs.setHobbies(List.of("jazz"));
+        when(customerRepository.findAll()).thenReturn(List.of(alice));
+        when(preferencesRepository.findByCustomer(alice)).thenReturn(Optional.of(prefs));
+        when(openAIService.generateClusterSuggestions(eq("London"), eq(SuggestionCategory.DAILY), anyInt()))
+                .thenReturn(List.of(new OpenAIService.SuggestionData("Jazz night", "Live jazz downtown", "London", "$20", null, null)));
+        stubSaveAllPassthrough();
+
+        service.generateDailySuggestions();
+
+        ArgumentCaptor<List<Suggestion>> captor = ArgumentCaptor.forClass(List.class);
+        verify(suggestionRepository).saveAll(captor.capture());
+        assertThat(captor.getValue().get(0).getReasonForSuggestion()).isEqualTo("Picked for you based on your interest in jazz");
+    }
+
+    @Test
+    void generateDailySuggestions_noMatchingInterest_fallsBackToDefaultReason() {
+        SuggestionService service = newService();
+        Customer alice = customerInCity("alice@example.com", "London");
+        CustomerPreferences prefs = new CustomerPreferences();
+        prefs.setHobbies(List.of("painting"));
+        when(customerRepository.findAll()).thenReturn(List.of(alice));
+        when(preferencesRepository.findByCustomer(alice)).thenReturn(Optional.of(prefs));
+        when(openAIService.generateClusterSuggestions(eq("London"), eq(SuggestionCategory.DAILY), anyInt()))
+                .thenReturn(List.of(new OpenAIService.SuggestionData("Jazz night", "Live jazz downtown", "London", "$20", null, null)));
+        stubSaveAllPassthrough();
+
+        service.generateDailySuggestions();
+
+        ArgumentCaptor<List<Suggestion>> captor = ArgumentCaptor.forClass(List.class);
+        verify(suggestionRepository).saveAll(captor.capture());
+        assertThat(captor.getValue().get(0).getReasonForSuggestion())
+                .isEqualTo("Personalized pick based on your profile and preferences");
     }
 }

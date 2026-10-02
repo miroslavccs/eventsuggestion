@@ -3,12 +3,14 @@ package com.codecraft.eventsuggestion.service;
 import com.codecraft.eventsuggestion.domain.Customer;
 import com.codecraft.eventsuggestion.domain.CustomerPreferences;
 import com.codecraft.eventsuggestion.domain.Suggestion;
+import com.codecraft.eventsuggestion.domain.SuggestionContent;
 import com.codecraft.eventsuggestion.domain.enums.SuggestionCategory;
 import com.codecraft.eventsuggestion.domain.enums.SuggestionStatus;
 import com.codecraft.eventsuggestion.dto.FeedbackRequest;
 import com.codecraft.eventsuggestion.dto.SuggestionDto;
 import com.codecraft.eventsuggestion.repository.CustomerPreferencesRepository;
 import com.codecraft.eventsuggestion.repository.CustomerRepository;
+import com.codecraft.eventsuggestion.repository.SuggestionContentRepository;
 import com.codecraft.eventsuggestion.repository.SuggestionRepository;
 import jakarta.persistence.EntityNotFoundException;
 import org.slf4j.Logger;
@@ -20,27 +22,35 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Stream;
 
 @Service
 public class SuggestionService {
 
     private static final Logger log = LoggerFactory.getLogger(SuggestionService.class);
     private static final int SUGGESTIONS_PER_RUN = 3;
+    private static final int MAX_CLUSTER_SUGGESTIONS = 10;
     private static final int FEEDBACK_HISTORY_LIMIT = 30;
     private static final int LEARNING_UPDATE_INTERVAL = 5;
     private static final String DEFAULT_REASON = "Personalized pick based on your profile and preferences";
 
     private final SuggestionRepository suggestionRepository;
+    private final SuggestionContentRepository suggestionContentRepository;
     private final CustomerRepository customerRepository;
     private final CustomerPreferencesRepository preferencesRepository;
     private final OpenAIService openAIService;
 
     public SuggestionService(SuggestionRepository suggestionRepository,
+                             SuggestionContentRepository suggestionContentRepository,
                              CustomerRepository customerRepository,
                              CustomerPreferencesRepository preferencesRepository,
                              OpenAIService openAIService) {
         this.suggestionRepository = suggestionRepository;
+        this.suggestionContentRepository = suggestionContentRepository;
         this.customerRepository = customerRepository;
         this.preferencesRepository = preferencesRepository;
         this.openAIService = openAIService;
@@ -70,9 +80,33 @@ public class SuggestionService {
     }
 
     private void generateForAllCustomers(SuggestionCategory category) {
-        customerRepository.findAll().forEach(customer -> {
+        Map<String, List<Customer>> clusters = new LinkedHashMap<>();
+        List<Customer> individual = new ArrayList<>();
+
+        for (Customer customer : customerRepository.findAll()) {
             try {
-                if (isPaused(customer, category)) return;
+                if (isPaused(customer, category)) continue;
+                String city = cityOf(customer);
+                if (city == null) {
+                    individual.add(customer);
+                } else {
+                    clusters.computeIfAbsent(city, k -> new ArrayList<>()).add(customer);
+                }
+            } catch (Exception e) {
+                log.error("Failed checking {} generation eligibility for customer {}", category, customer.getId(), e);
+            }
+        }
+
+        clusters.forEach((city, group) -> {
+            try {
+                generateForCluster(city, group, category);
+            } catch (Exception e) {
+                log.error("Failed generating {} cluster suggestions for {}", category, city, e);
+            }
+        });
+
+        individual.forEach(customer -> {
+            try {
                 generateForCustomer(customer, category);
             } catch (Exception e) {
                 log.error("Failed generating {} suggestions for customer {}", category, customer.getId(), e);
@@ -86,6 +120,63 @@ public class SuggestionService {
                 .orElse(false);
     }
 
+    private String cityOf(Customer customer) {
+        if (customer.getAddress() == null) return null;
+        String city = customer.getAddress().getCity();
+        return (city == null || city.isBlank()) ? null : city;
+    }
+
+    // ─── Clustered generation (scheduled batch jobs only) ─────────────────────
+
+    private void generateForCluster(String city, List<Customer> customers, SuggestionCategory category) {
+        int count = suggestionCountForCluster(customers.size());
+        List<OpenAIService.SuggestionData> aiData = openAIService.generateClusterSuggestions(city, category, count);
+        if (aiData.isEmpty()) return;
+
+        List<SuggestionContent> contents = suggestionContentRepository.saveAll(
+                aiData.stream().map(data -> buildContent(category, city, data)).toList());
+
+        List<Suggestion> assignments = new ArrayList<>();
+        for (Customer customer : customers) {
+            CustomerPreferences prefs = preferencesRepository.findByCustomer(customer).orElse(null);
+            for (SuggestionContent content : contents) {
+                assignments.add(buildAssignment(customer, content, templatedReason(content, prefs)));
+            }
+        }
+        suggestionRepository.saveAll(assignments);
+    }
+
+    private int suggestionCountForCluster(int clusterSize) {
+        if (clusterSize >= 100) return MAX_CLUSTER_SUGGESTIONS;
+        if (clusterSize >= 20) return 7;
+        if (clusterSize >= 5) return 5;
+        return SUGGESTIONS_PER_RUN;
+    }
+
+    private String templatedReason(SuggestionContent content, CustomerPreferences prefs) {
+        if (prefs != null) {
+            String match = matchingInterest(content, prefs);
+            if (match != null) {
+                return "Picked for you based on your interest in " + match;
+            }
+        }
+        return DEFAULT_REASON;
+    }
+
+    private String matchingInterest(SuggestionContent content, CustomerPreferences prefs) {
+        String haystack = (nullToEmpty(content.getTitle()) + " " + nullToEmpty(content.getDescription())).toLowerCase();
+        return Stream.of(prefs.getSports(), prefs.getHobbies(), prefs.getInterests())
+                .flatMap(List::stream)
+                .filter(term -> term != null && !term.isBlank())
+                .filter(term -> haystack.contains(term.toLowerCase()))
+                .findFirst()
+                .orElse(null);
+    }
+
+    private String nullToEmpty(String s) {
+        return s == null ? "" : s;
+    }
+
     // ─── On-demand generation (e.g., from controller or after registration) ──
 
     @Transactional
@@ -97,11 +188,15 @@ public class SuggestionService {
         List<OpenAIService.SuggestionData> aiData =
                 openAIService.generateSuggestions(customer, prefs, recentFeedback, category, SUGGESTIONS_PER_RUN);
 
-        List<Suggestion> suggestions = aiData.stream()
-                .map(data -> buildSuggestion(customer, category, data))
-                .toList();
+        List<SuggestionContent> contents = suggestionContentRepository.saveAll(
+                aiData.stream().map(data -> buildContent(category, cityOf(customer), data)).toList());
 
-        return suggestionRepository.saveAll(suggestions).stream()
+        List<Suggestion> assignments = new ArrayList<>();
+        for (int i = 0; i < contents.size(); i++) {
+            assignments.add(buildAssignment(customer, contents.get(i), reasonOrDefault(aiData.get(i).reasonForSuggestion())));
+        }
+
+        return suggestionRepository.saveAll(assignments).stream()
                 .map(SuggestionDto::from)
                 .toList();
     }
@@ -225,17 +320,24 @@ public class SuggestionService {
 
     // ─── Helpers ─────────────────────────────────────────────────────────────
 
-    private Suggestion buildSuggestion(Customer customer, SuggestionCategory category,
-                                        OpenAIService.SuggestionData data) {
+    private SuggestionContent buildContent(SuggestionCategory category, String city, OpenAIService.SuggestionData data) {
+        SuggestionContent c = new SuggestionContent();
+        c.setCategory(category);
+        c.setTitle(data.title());
+        c.setDescription(data.description());
+        c.setLocation(data.location());
+        c.setEstimatedCost(data.estimatedCost());
+        c.setSuggestedDate(parseDateSafely(data.suggestedDate(), category));
+        c.setCity(city);
+        return c;
+    }
+
+    private Suggestion buildAssignment(Customer customer, SuggestionContent content, String reason) {
         Suggestion s = new Suggestion();
         s.setCustomer(customer);
-        s.setCategory(category);
-        s.setTitle(data.title());
-        s.setDescription(data.description());
-        s.setLocation(data.location());
-        s.setEstimatedCost(data.estimatedCost());
-        s.setSuggestedDate(parseDateSafely(data.suggestedDate(), category));
-        s.setReasonForSuggestion(reasonOrDefault(data.reasonForSuggestion()));
+        s.setContent(content);
+        s.setSuggestedDate(content.getSuggestedDate());
+        s.setReasonForSuggestion(reason);
         s.setStatus(SuggestionStatus.PENDING);
         s.setNotificationRead(false);
         return s;
