@@ -221,6 +221,7 @@ All settings can be overridden via environment variables:
 | `openai.model` | — | `auto` |
 | `openai.base-url` | — | `https://dreamprompting.com/api/v1` (OpenAI-compatible) |
 | `app.jwt.secret` | `JWT_SECRET` | dev default |
+| `app.cors.allowed-origins` | `CORS_ALLOWED_ORIGINS` | `http://localhost:8081,http://localhost:19006` (comma-separated) |
 | `app.jwt.expiration-ms` | — | `86400000` (24 h) |
 
 Render deployments compose `spring.datasource.url` from `DB_HOST`/`DB_PORT`/`DB_NAME` instead (see
@@ -253,6 +254,10 @@ long-term.
 ---
 
 ## Changelog
+
+### 0.0.10
+- Added CORS support so browser clients (e.g. the Expo web app) on another origin can call the API: allowed origins come from `app.cors.allowed-origins` / `CORS_ALLOWED_ORIGINS` (default `http://localhost:8081,http://localhost:19006`); preflight `OPTIONS` requests succeed without authentication.
+- `GET /api/customers/me` (and the `PUT` response) now also returns the read-only `learnedProfile` (may be `null`) and `responsesUntilRefresh` (feedback responses left until the learned profile is next refreshed); both are ignored on `PUT`.
 
 ### 0.0.9
 - Switched the LLM provider from OpenAI directly to [DreamPrompting](https://dreamprompting.com/api-docs), a free, OpenAI-compatible gateway with automatic provider failover — confirmed to be a true drop-in replacement (same `/chat/completions` request/response shape, same Bearer-token auth), so no code changes were needed, only `openai.base-url` (now `https://dreamprompting.com/api/v1`) and `openai.model` (now `auto`, DreamPrompting's failover default).

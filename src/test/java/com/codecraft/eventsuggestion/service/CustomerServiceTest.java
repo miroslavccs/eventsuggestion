@@ -9,7 +9,9 @@ import com.codecraft.eventsuggestion.dto.LoginResponse;
 import com.codecraft.eventsuggestion.dto.RegisterRequest;
 import com.codecraft.eventsuggestion.repository.CustomerPreferencesRepository;
 import com.codecraft.eventsuggestion.repository.CustomerRepository;
+import com.codecraft.eventsuggestion.repository.SuggestionRepository;
 import com.codecraft.eventsuggestion.security.JwtUtil;
+import com.codecraft.eventsuggestion.domain.enums.SuggestionStatus;
 import jakarta.persistence.EntityNotFoundException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -36,6 +38,8 @@ class CustomerServiceTest {
     @Mock
     private CustomerPreferencesRepository preferencesRepository;
     @Mock
+    private SuggestionRepository suggestionRepository;
+    @Mock
     private PasswordEncoder passwordEncoder;
     @Mock
     private JwtUtil jwtUtil;
@@ -43,7 +47,7 @@ class CustomerServiceTest {
     private CustomerService customerService;
 
     private CustomerService newService() {
-        return new CustomerService(customerRepository, preferencesRepository, passwordEncoder, jwtUtil);
+        return new CustomerService(customerRepository, preferencesRepository, suggestionRepository, passwordEncoder, jwtUtil);
     }
 
     private RegisterRequest registerRequest(RegisterRequest.AddressDto address,
@@ -186,6 +190,68 @@ class CustomerServiceTest {
     }
 
     @Test
+    void getProfile_withLearnedProfile_exposesItAndRefreshCounter() {
+        customerService = newService();
+        Customer customer = savedCustomer();
+        CustomerPreferences prefs = new CustomerPreferences();
+        prefs.setLearnedProfile("likes outdoor events");
+        when(customerRepository.findByEmail("jane@example.com")).thenReturn(Optional.of(customer));
+        when(preferencesRepository.findByCustomer(customer)).thenReturn(Optional.of(prefs));
+        when(suggestionRepository.countByCustomerIdAndStatusNot(any(), eq(SuggestionStatus.PENDING))).thenReturn(7L);
+
+        CustomerProfileDto dto = customerService.getProfile("jane@example.com");
+
+        assertThat(dto.learnedProfile()).isEqualTo("likes outdoor events");
+        assertThat(dto.responsesUntilRefresh()).isEqualTo(3);
+    }
+
+    @Test
+    void getProfile_noResponsesYet_nullLearnedProfileAndFullCounter() {
+        customerService = newService();
+        Customer customer = savedCustomer();
+        when(customerRepository.findByEmail("jane@example.com")).thenReturn(Optional.of(customer));
+        when(preferencesRepository.findByCustomer(customer)).thenReturn(Optional.of(new CustomerPreferences()));
+        when(suggestionRepository.countByCustomerIdAndStatusNot(any(), eq(SuggestionStatus.PENDING))).thenReturn(0L);
+
+        CustomerProfileDto dto = customerService.getProfile("jane@example.com");
+
+        assertThat(dto.learnedProfile()).isNull();
+        assertThat(dto.responsesUntilRefresh()).isEqualTo(5);
+    }
+
+    @Test
+    void getProfile_countOnRefreshBoundary_resetsToFive() {
+        customerService = newService();
+        Customer customer = savedCustomer();
+        when(customerRepository.findByEmail("jane@example.com")).thenReturn(Optional.of(customer));
+        when(preferencesRepository.findByCustomer(customer)).thenReturn(Optional.empty());
+        when(suggestionRepository.countByCustomerIdAndStatusNot(any(), eq(SuggestionStatus.PENDING))).thenReturn(10L);
+
+        assertThat(customerService.getProfile("jane@example.com").responsesUntilRefresh()).isEqualTo(5);
+    }
+
+    @Test
+    void updateProfile_ignoresClientSuppliedLearnedProfile() {
+        customerService = newService();
+        Customer customer = savedCustomer();
+        CustomerPreferences prefs = new CustomerPreferences();
+        prefs.setLearnedProfile("server-side");
+        when(customerRepository.findByEmail("jane@example.com")).thenReturn(Optional.of(customer));
+        when(preferencesRepository.findByCustomer(customer)).thenReturn(Optional.of(prefs));
+        when(suggestionRepository.countByCustomerIdAndStatusNot(any(), eq(SuggestionStatus.PENDING))).thenReturn(2L);
+
+        CustomerProfileDto dto = new CustomerProfileDto(
+                1L, "jane@example.com", "Jane", "Doe", null, 31, null, "MSc", "Engineer",
+                List.of(), List.of(), List.of(), false, false, null, false, List.of(), "hacked", 1);
+
+        CustomerProfileDto result = customerService.updateProfile("jane@example.com", dto);
+
+        assertThat(prefs.getLearnedProfile()).isEqualTo("server-side");
+        assertThat(result.learnedProfile()).isEqualTo("server-side");
+        assertThat(result.responsesUntilRefresh()).isEqualTo(3);
+    }
+
+    @Test
     void getProfile_withoutPreferences_returnsDefaultedDto() {
         customerService = newService();
         Customer customer = savedCustomer();
@@ -209,7 +275,7 @@ class CustomerServiceTest {
         CustomerProfileDto dto = new CustomerProfileDto(
                 1L, "jane@example.com", "Jane", "Doe", null, 31, null, "MSc", "Engineer",
                 List.of("cycling"), List.of(), List.of(), true, true, "updated notes",
-                true, List.of(SuggestionCategory.DAILY));
+                true, List.of(SuggestionCategory.DAILY), "client-sent", 99);
 
         customerService.updateProfile("jane@example.com", dto);
 
@@ -230,7 +296,7 @@ class CustomerServiceTest {
 
         CustomerProfileDto dto = new CustomerProfileDto(
                 1L, "jane@example.com", "Jane", "Doe", null, 31, null, "MSc", "Engineer",
-                List.of(), List.of(), List.of(), false, false, null, false, List.of());
+                List.of(), List.of(), List.of(), false, false, null, false, List.of(), null, 0);
 
         customerService.updateProfile("jane@example.com", dto);
 

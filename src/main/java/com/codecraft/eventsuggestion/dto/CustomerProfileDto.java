@@ -26,7 +26,10 @@ public record CustomerProfileDto(
         boolean likesNightlife,
         String additionalNotes,
         boolean vacationMode,
-        List<SuggestionCategory> pausedCategories
+        List<SuggestionCategory> pausedCategories,
+        // Read-only (ignored on PUT)
+        String learnedProfile,
+        int responsesUntilRefresh
 ) {
     public record AddressDto(String street, String city, String state, String country, String zipCode) {
         public static AddressDto from(Address a) {
@@ -35,7 +38,7 @@ public record CustomerProfileDto(
         }
     }
 
-    public static CustomerProfileDto from(Customer c, CustomerPreferences p) {
+    public static CustomerProfileDto from(Customer c, CustomerPreferences p, int responsesUntilRefresh) {
         return new CustomerProfileDto(
                 c.getId(),
                 c.getEmail(),
@@ -53,7 +56,9 @@ public record CustomerProfileDto(
                 p != null && p.isLikesNightlife(),
                 p != null ? p.getAdditionalNotes() : null,
                 p != null && p.isVacationMode(),
-                p != null ? List.copyOf(p.getPausedCategories()) : List.of()
+                p != null ? List.copyOf(p.getPausedCategories()) : List.of(),
+                p != null ? p.getLearnedProfile() : null,
+                responsesUntilRefresh
         );
     }
 }

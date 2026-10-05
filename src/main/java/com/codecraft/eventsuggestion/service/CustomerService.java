@@ -8,7 +8,9 @@ import com.codecraft.eventsuggestion.dto.LoginRequest;
 import com.codecraft.eventsuggestion.dto.LoginResponse;
 import com.codecraft.eventsuggestion.dto.RegisterRequest;
 import com.codecraft.eventsuggestion.repository.CustomerPreferencesRepository;
+import com.codecraft.eventsuggestion.domain.enums.SuggestionStatus;
 import com.codecraft.eventsuggestion.repository.CustomerRepository;
+import com.codecraft.eventsuggestion.repository.SuggestionRepository;
 import com.codecraft.eventsuggestion.security.JwtUtil;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -24,15 +26,18 @@ public class CustomerService {
 
     private final CustomerRepository customerRepository;
     private final CustomerPreferencesRepository preferencesRepository;
+    private final SuggestionRepository suggestionRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
 
     public CustomerService(CustomerRepository customerRepository,
                            CustomerPreferencesRepository preferencesRepository,
+                           SuggestionRepository suggestionRepository,
                            PasswordEncoder passwordEncoder,
                            JwtUtil jwtUtil) {
         this.customerRepository = customerRepository;
         this.preferencesRepository = preferencesRepository;
+        this.suggestionRepository = suggestionRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtUtil = jwtUtil;
     }
@@ -95,7 +100,7 @@ public class CustomerService {
     public CustomerProfileDto getProfile(String email) {
         Customer customer = findByEmail(email);
         CustomerPreferences prefs = preferencesRepository.findByCustomer(customer).orElse(null);
-        return CustomerProfileDto.from(customer, prefs);
+        return CustomerProfileDto.from(customer, prefs, responsesUntilRefresh(customer));
     }
 
     @Transactional
@@ -134,7 +139,12 @@ public class CustomerService {
         prefs.setPausedCategories(dto.pausedCategories() != null ? new HashSet<>(dto.pausedCategories()) : Set.of());
         preferencesRepository.save(prefs);
 
-        return CustomerProfileDto.from(customer, prefs);
+        return CustomerProfileDto.from(customer, prefs, responsesUntilRefresh(customer));
+    }
+
+    private int responsesUntilRefresh(Customer customer) {
+        long responses = suggestionRepository.countByCustomerIdAndStatusNot(customer.getId(), SuggestionStatus.PENDING);
+        return SuggestionService.LEARNING_UPDATE_INTERVAL - (int) (responses % SuggestionService.LEARNING_UPDATE_INTERVAL);
     }
 
     public Customer findByEmail(String email) {

@@ -28,7 +28,7 @@ public class SuggestionService {
     private static final Logger log = LoggerFactory.getLogger(SuggestionService.class);
     private static final int SUGGESTIONS_PER_RUN = 3;
     private static final int FEEDBACK_HISTORY_LIMIT = 30;
-    private static final int LEARNING_UPDATE_INTERVAL = 5;
+    static final int LEARNING_UPDATE_INTERVAL = 5;
     private static final String DEFAULT_REASON = "Personalized pick based on your profile and preferences";
 
     private final SuggestionRepository suggestionRepository;

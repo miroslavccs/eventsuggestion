@@ -127,4 +127,25 @@ class SecurityIntegrationTest {
         assertThat(body).containsKey("errors");
         assertThat((Map) body.get("errors")).containsKey("email");
     }
+
+    @Test
+    void preflight_fromAllowedOrigin_returnsCorsHeaderWithoutAuth() {
+        client.options().uri("/api/suggestions")
+                .header("Origin", "http://localhost:8081")
+                .header("Access-Control-Request-Method", "GET")
+                .header("Access-Control-Request-Headers", "Authorization")
+                .exchange()
+                .expectStatus().isOk()
+                .expectHeader().valueEquals("Access-Control-Allow-Origin", "http://localhost:8081");
+    }
+
+    @Test
+    void preflight_fromDisallowedOrigin_isRejectedWithoutCorsHeader() {
+        client.options().uri("/api/suggestions")
+                .header("Origin", "http://evil.example.com")
+                .header("Access-Control-Request-Method", "GET")
+                .exchange()
+                .expectStatus().isForbidden()
+                .expectHeader().doesNotExist("Access-Control-Allow-Origin");
+    }
 }
