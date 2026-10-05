@@ -42,7 +42,7 @@ Every 5 feedback responses the system asks OpenAI to summarise what it has learn
 | JDK | 21 |
 | Maven | 3.9 (or use the included `./mvnw`) |
 | Docker & Docker Compose | 24+ |
-| OpenAI API key | — |
+| LLM API key (free via [DreamPrompting](https://dreamprompting.com/api-docs), OpenAI-compatible) | — |
 
 ---
 
@@ -60,7 +60,7 @@ cd livelife  # or your project directory
 #### 2. Set environment variables
 
 ```bash
-export OPENAI_API_KEY=sk-...
+export OPENAI_API_KEY=...   # free key from https://dreamprompting.com/api-docs
 # JWT_SECRET is optional — a dev default is used if not set
 ```
 
@@ -218,7 +218,8 @@ All settings can be overridden via environment variables:
 | `spring.datasource.username` | `DB_USERNAME` | `eventsuggestion` |
 | `spring.datasource.password` | `DB_PASSWORD` | `eventsuggestion` |
 | `openai.api-key` | `OPENAI_API_KEY` | *(empty)* |
-| `openai.model` | — | `gpt-4o` |
+| `openai.model` | — | `auto` |
+| `openai.base-url` | — | `https://dreamprompting.com/api/v1` (OpenAI-compatible) |
 | `app.jwt.secret` | `JWT_SECRET` | dev default |
 | `app.jwt.expiration-ms` | — | `86400000` (24 h) |
 
@@ -252,6 +253,9 @@ long-term.
 ---
 
 ## Changelog
+
+### 0.0.9
+- Switched the LLM provider from OpenAI directly to [DreamPrompting](https://dreamprompting.com/api-docs), a free, OpenAI-compatible gateway with automatic provider failover — confirmed to be a true drop-in replacement (same `/chat/completions` request/response shape, same Bearer-token auth), so no code changes were needed, only `openai.base-url` (now `https://dreamprompting.com/api/v1`) and `openai.model` (now `auto`, DreamPrompting's failover default).
 
 ### 0.0.8
 - Added `render.yaml` to deploy to Render as a free web service + free Postgres via its Blueprint feature, reusing the existing `Dockerfile` unchanged.
